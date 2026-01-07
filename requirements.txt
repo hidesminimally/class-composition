@@ -1,0 +1,9 @@
+streamlit
+pandas
+geopandas
+gspread
+google-auth
+streamlit-folium
+mapclassify
+folium
+matplotlib
