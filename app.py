@@ -33,9 +33,16 @@ else:
 
 # TOP METRICS ROW
 c1, c2, c3 = st.columns(3)
-c1.metric("Total Renters", f"{local_data['Total Renters'].sum():,}")
-c2.metric("Avg Rent Burden", f"{local_data['Rent Burden'].mean():.1f}%")
-c3.metric("Eviction Count (RAP)", f"{local_data['Evictions'].sum():,}")
+# Use 'Total' instead of 'Total Renters'
+# We also use .get() for the others to prevent crashes if data is missing
+c1.metric("Total Population", f"{local_data['Total'].sum():,}")
+
+# Only show these if the columns actually exist, otherwise show "N/A"
+burden = local_data['Rent Burden'].mean() if 'Rent Burden' in local_data.columns else 0
+c2.metric("Avg Rent Burden", f"{burden:.1f}%")
+
+evictions = local_data['Evictions'].sum() if 'Evictions' in local_data.columns else 0
+c3.metric("Eviction Count", f"{evictions:,}")
 
 # MAP AND CHARTS SPLIT
 col_map, col_charts = st.columns([2, 1])
