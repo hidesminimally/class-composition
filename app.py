@@ -139,24 +139,6 @@ with c_map:
         )
         st_folium(m, use_container_width=True, height=500)
     else:
-        st.warning("No data found for this selection.")
-
-    # 2. RENDER THE MAP
-    # Only map if we have data to avoid the crash
-    if plot_col in map_data.columns and map_data[plot_col].sum() > 0:
-        m = map_data.explore(
-            column=plot_col,
-            cmap=color_scale,
-            scheme="quantiles",  # Forces distinct colors
-            k=5,                 # 5 distinct buckets
-            tiles="CartoDB positron",
-            tooltip=["TANC Local", "Total", plot_col], # Only show relevant info
-            popup=False,
-            legend_kwds={"caption": target_metric},
-            style_kwds={"fillOpacity": 0.7, "weight": 0.5}
-        )
-        st_folium(m, use_container_width=True, height=500)
-    else:
         st.warning(f"Not enough data to display {target_metric} for this area.")
         # Render empty map so layout doesn't jump
         m = map_data.explore(color="#f0f0f0", tiles="CartoDB positron")
