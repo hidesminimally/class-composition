@@ -195,3 +195,47 @@ with c_chart:
     fig.update_layout(xaxis_title="", yaxis_title="")
     
     st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+st.markdown("---")
+st.header("🔥 Top Organizing Targets (The 'Bleeding' Edge)")
+st.write("These are the specific tracts where tenants are paying >50% of their income on rent.")
+
+# 1. FILTER: Find the Crisis Zones
+# We look for High Rent Burden (> 40%) and significant population
+crisis_data = local_data[
+    (local_data["Rent Burden"] > 40) & 
+    (local_data["Total"] > 500)
+].copy()
+
+# 2. SORT: Worst first
+crisis_data = crisis_data.sort_values(by="Rent Burden", ascending=False)
+
+# 3. DISPLAY: A clean, actionable list
+if not crisis_data.empty:
+    # Format the columns to be readable
+    display_cols = ["TANC Local", "Match_ID", "Rent Burden", "Median Rent", "Total", "Black", "Hispanic"]
+    
+    # Filter columns that actually exist to prevent crashing
+    final_cols = [c for c in display_cols if c in crisis_data.columns]
+    
+    # Show the table
+    st.dataframe(
+        crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # 4. DOWNLOAD BUTTON (So you can print it and walk)
+    csv = crisis_data[final_cols].to_csv(index=False).encode('utf-8')
+    st.download_button(
+        "📥 Download Target List for Canvassing",
+        csv,
+        "tanc_targets.csv",
+        "text/csv",
+        key='download-csv'
+    )
+else:
+    st.success("No tracts found with extreme rent burden (>40%) in this view.")
