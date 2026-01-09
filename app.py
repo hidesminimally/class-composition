@@ -5,7 +5,7 @@ import plotly.express as px
 from streamlit_folium import st_folium
 
 # DEBUGGING: Print columns to the app so you can see them
-st.write("Current Columns:", df.columns.tolist()
+st.write("Current Columns:", df.columns.tolist())
 # PAGE CONFIG
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
 
