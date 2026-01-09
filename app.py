@@ -13,8 +13,7 @@ def load_data():
     df = pd.read_csv("tanc_data_clean.csv")
     gdf = gpd.read_file("tanc_map_data.geojson")
     
-    # --- ID CLEANING (The "Fixer") ---
-    # Forces IDs to be simple strings like "409700" (removes .0 decimals)
+    # --- ID CLEANING ---
     def clean_id(x):
         return str(x).split('.')[0].zfill(6)[-6:]
 
@@ -27,6 +26,31 @@ def load_data():
     
     # Merge
     full_map = gdf.merge(df, on='Match_ID', how='inner', suffixes=('', '_y'))
+    
+    # --- PRE-CALCULATE ALL METRICS HERE ---
+    # This ensures the Table has access to them, not just the Map
+    
+    # Helper to calculate % safely
+    def calc(d, n, new_col):
+        if n in d.columns and "Total" in d.columns:
+            d[new_col] = (d[n] / d["Total"].replace(0, 1) * 100).round(1)
+    
+    # Race %
+    calc(df, "Black", "% Black")
+    calc(df, "White", "% White")
+    calc(df, "Asian", "% Asian")
+    calc(df, "Hispanic", "% Hispanic")
+    
+    # Language % (If columns exist)
+    if "C16002_004E" in df.columns: # Spanish
+        df["% Spanish LE"] = (df["C16002_004E"] / df["C16002_001E"].replace(0,1) * 100).round(1)
+    
+    if "C16002_007E" in df.columns: # Asian
+        df["% Asian LE"] = (df["C16002_007E"] / df["C16002_001E"].replace(0,1) * 100).round(1)
+
+    # Re-merge to ensure map has the new calc columns
+    full_map = gdf.merge(df, on='Match_ID', how='inner', suffixes=('', '_y'))
+
     return df, full_map
 
 try:
@@ -61,14 +85,14 @@ metrics_map = {
     "% Spanish Limited English": ("% Spanish LE", "YlGn"),
 }
 # Only show valid options
-available_opts = [k for k, v in metrics_map.items() if v[0] in df.columns or v[0] in ["% Black", "% Hispanic", "% Asian", "% White"]]
+available_opts = [k for k, v in metrics_map.items() if v[0] in df.columns]
 target_choice = st.sidebar.radio("Select Layer:", available_opts)
 target_col_name, target_cmap = metrics_map[target_choice]
 
-# --- B. TARGET LIST (Moved here so it works!) ---
+# --- B. TARGET LIST (UPDATED WITH COLUMNS) ---
 st.sidebar.markdown("---")
-st.sidebar.header("🔥 Priority Targets")
-st.sidebar.write("Click a row to zoom map.")
+st.sidebar.header("Targets")
+st.sidebar.caption("High Rent Burden + Language Isolation")
 
 # Filter Data for current view
 if selected_local != "All":
@@ -84,26 +108,28 @@ zoom_level = 11
 highlight_id = None
 
 if "Rent Burden" in local_data.columns:
+    # Filter: High Burden (>35%) AND High Population
     crisis_data = local_data[
-        (local_data["Rent Burden"] > 40) & 
+        (local_data["Rent Burden"] > 35) & 
         (local_data["Total"] > 500)
     ].copy().sort_values(by="Rent Burden", ascending=False)
     
     if not crisis_data.empty:
-        # Show mini table in sidebar
-        display_cols = ["Match_ID", "Rent Burden", "Median Rent"]
-        final_cols = [c for c in display_cols if c in crisis_data.columns]
+        # COLUMNS TO SHOW IN SIDEBAR
+        # We now include the Language columns we calculated at the top
+        wanted_cols = ["Match_ID", "Rent Burden", "% Spanish LE", "% Asian LE", "Unemployment Rate"]
+        final_cols = [c for c in wanted_cols if c in crisis_data.columns]
         
         event = st.sidebar.dataframe(
-            crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
+            crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds", vmin=30, vmax=60),
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
-            height=300
+            height=400
         )
         
-        # ZOOM LOGIC (Now runs BEFORE the map draws)
+        # ZOOM LOGIC
         if len(event.selection.rows) > 0:
             idx = event.selection.rows[0]
             selected_id = crisis_data.iloc[idx]["Match_ID"]
@@ -117,7 +143,7 @@ if "Rent Burden" in local_data.columns:
                 zoom_level = 14
                 highlight_id = str(selected_id)
             else:
-                st.sidebar.warning(f"ID {selected_id} found in data but not map.")
+                st.sidebar.warning(f"ID {selected_id} missing from map.")
 
 # =========================================================
 # 4. MAIN CONTENT
@@ -127,8 +153,10 @@ st.title(f"Composition: {selected_local}")
 # Metrics
 c1, c2, c3 = st.columns(3)
 c1.metric("Total Population", f"{local_data['Total'].sum():,}" if 'Total' in local_data.columns else "N/A")
-c2.metric("Rent Burden", f"{local_data['Rent Burden'].mean():.1f}%" if 'Rent Burden' in local_data.columns else "N/A")
-c3.metric("Evictions", f"{local_data['Evictions'].sum():,}" if 'Evictions' in local_data.columns else "N/A")
+c2.metric("Avg Rent Burden", f"{local_data['Rent Burden'].mean():.1f}%" if 'Rent Burden' in local_data.columns else "N/A")
+# Check if Unemployment exists
+unemp_val = f"{local_data['Unemployment Rate'].mean():.1f}%" if 'Unemployment Rate' in local_data.columns else "N/A"
+c3.metric("Avg Unemployment", unemp_val)
 
 # Map & Chart
 c_map, c_chart = st.columns([2, 1])
@@ -136,25 +164,11 @@ c_map, c_chart = st.columns([2, 1])
 with c_map:
     st.subheader(f"Map: {target_choice}")
     
-    # Data Prep
-    valid_map_data = map_data.copy()
+    # Render
     plot_col = target_col_name
     
-    # Auto-Calc Percentages
-    def calc_pct(df, n, d, name):
-        if n in df.columns and d in df.columns:
-            df[name] = (df[n] / df[d].replace(0, 1) * 100).round(1)
-            return name
-        return None
-
-    if target_choice == "% Black": plot_col = calc_pct(valid_map_data, "Black", "Total", "Pct_Black")
-    elif target_choice == "% White": plot_col = calc_pct(valid_map_data, "White", "Total", "Pct_White")
-    elif target_choice == "% Asian": plot_col = calc_pct(valid_map_data, "Asian", "Total", "Pct_Asian")
-    elif target_choice == "% Hispanic": plot_col = calc_pct(valid_map_data, "Hispanic", "Total", "Pct_Hisp")
-    
-    # Render
-    if plot_col in valid_map_data.columns:
-        valid_map_data = valid_map_data[valid_map_data[plot_col] > 0]
+    if plot_col in map_data.columns:
+        valid_map_data = map_data[map_data[plot_col] > 0]
         if not valid_map_data.empty:
             
             # Highlight Logic
@@ -173,7 +187,7 @@ with c_map:
                 tooltip=["TANC Local", "Total", plot_col],
                 popup=False,
                 style_kwds={"style_function": style_fn},
-                location=zoom_center,  # <--- ZOOM HAPPENS HERE
+                location=zoom_center, 
                 zoom_start=zoom_level
             )
             st_folium(m, use_container_width=True, height=500)
@@ -201,13 +215,30 @@ with c_chart:
 
 # Intersectionality Section (Bottom)
 st.markdown("---")
-st.header("📊 Deep Dive: Race vs. Rent")
+st.header("📊  Race vs. Rent")
 c_deep1, c_deep2 = st.columns(2)
 with c_deep1:
     race_comp = st.selectbox("Compare:", ["% Hispanic", "% Black", "% Asian", "% White"])
-    race_col = race_comp.replace("% ", "")
-    if race_col in local_data.columns and "Rent Burden" in local_data.columns:
-        # Re-calc % just in case
-        local_data[race_comp] = (local_data[race_col]/local_data["Total"].replace(0,1)*100)
-        fig = px.scatter(local_data, x=race_comp, y="Rent Burden", trendline="ols", color="TANC Local", title=f"{race_comp} vs Rent Burden")
+    
+    if race_comp in local_data.columns and "Rent Burden" in local_data.columns:
+        fig = px.scatter(
+            local_data, 
+            x=race_comp, 
+            y="Rent Burden", 
+            trendline="ols",  # REQUIRES statsmodels in requirements.txt
+            color="TANC Local", 
+            title=f"{race_comp} vs Rent Burden"
+        )
         st.plotly_chart(fig, use_container_width=True)
+        
+with c_deep2:
+    if "Unemployment Rate" in local_data.columns and "% Spanish LE" in local_data.columns:
+        fig2 = px.scatter(
+            local_data, 
+            x="% Spanish LE", 
+            y="Unemployment Rate", 
+            trendline="ols", 
+            color="TANC Local", 
+            title="Spanish Language vs Unemployment"
+        )
+        st.plotly_chart(fig2, use_container_width=True)
