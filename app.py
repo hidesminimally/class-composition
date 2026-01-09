@@ -182,3 +182,80 @@ d1, d2 = st.columns(2)
 
 def handle_click(event):
     if event.selection and len(event.selection.points) > 0:
+        point = event.selection.points[0]
+        c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
+        if c_data:
+            clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:]
+            if clicked_id != st.session_state.highlight_id:
+                target_shape = map_data[map_data["Match_ID"] == clicked_id]
+                if not target_shape.empty:
+                    centroid = target_shape.geometry.centroid.iloc[0]
+                    st.session_state.map_center = [centroid.y, centroid.x]
+                    st.session_state.map_zoom = 14
+                    st.session_state.highlight_id = clicked_id
+                    st.session_state.is_zoomed = True # LOCK THE ZOOM
+                    st.rerun()
+
+with d1:
+    race = st.selectbox("Does Race predict Rent Burden?", ["% Hispanic", "% Black", "% Asian", "% White"])
+    if race in local_data.columns and "Rent Burden" in local_data.columns:
+        clean_plot = local_data.dropna(subset=[race, "Rent Burden"])
+        fig = px.scatter(
+            clean_plot, x=race, y="Rent Burden", 
+            trendline="ols" if len(clean_plot) > 2 else None, 
+            color="TANC Local", hover_name="Match_ID",
+            title=f"Correlation: {race} vs Rent", custom_data=["Match_ID"]
+        )
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        handle_click(event)
+
+with d2:
+    lang_choice = st.selectbox("Does Language Isolation predict Unemployment?", ["% Spanish LE", "% Asian LE"])
+    if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
+        clean_plot = local_data.dropna(subset=[lang_choice, "Unemployment Rate"])
+        fig = px.scatter(
+            clean_plot, x=lang_choice, y="Unemployment Rate", 
+            trendline="ols" if len(clean_plot) > 2 else None,
+            color="TANC Local", hover_name="Match_ID",
+            title=f"Correlation: Language vs Jobs", custom_data=["Match_ID"]
+        )
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        handle_click(event)
+
+# =========================================================
+# 9. TARGET TABLE
+# =========================================================
+st.markdown("---")
+st.header("🔥 High-Priority Targets")
+st.caption("Neighborhoods with >35% Rent Burden and >500 people.")
+
+if "Rent Burden" in local_data.columns:
+    crisis_data = local_data[
+        (local_data["Rent Burden"] > 35) & 
+        (local_data["Total"] > 500)
+    ].sort_values(by="Rent Burden", ascending=False)
+
+    if not crisis_data.empty:
+        show_cols = ["TANC Local", "Match_ID", "Rent Burden", "% Black", "% Hispanic", "% Asian LE", "Unemployment Rate"]
+        final_cols = [c for c in show_cols if c in crisis_data.columns]
+
+        event = st.dataframe(
+            crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        if len(event.selection.rows) > 0:
+            idx = event.selection.rows[0]
+            selected_id = str(crisis_data.iloc[idx]["Match_ID"])
+            if selected_id != st.session_state.highlight_id:
+                target_shape = map_data[map_data["Match_ID"] == selected_id]
+                if not target_shape.empty:
+                    centroid = target_shape.geometry.centroid.iloc[0]
+                    st.session_state.map_center = [centroid.y, centroid.x]
+                    st.session_state.map_zoom = 15 # Deep Zoom
+                    st.session_state.highlight_id = selected_id
+                    st.session_state.is_zoomed = True # LOCK ZOOM
+                    st.rerun()
