@@ -7,19 +7,31 @@ import plotly.express as px
 # 1. CONFIGURATION (Must be the very first command)
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
 
-# 2. LOAD DATA
+# 2. LOAD DATA (Updated to Merge CSV + Map)
 @st.cache_data
 def load_data():
-    # These files must be in the same folder as app.py
+    # 1. Load the Data (Numbers)
     df = pd.read_csv("tanc_data_clean.csv")
+    
+    # 2. Load the Map (Shapes)
     gdf = gpd.read_file("tanc_map_data.geojson")
-    return df, gdf
+    
+    # 3. MERGE THEM TOGETHER
+    # We match them using the 'Match_ID' column
+    
+    # Ensure IDs are strings in both files so they match perfectly
+    df['Match_ID'] = df['Match_ID'].astype(str)
+    
+    # (Safety Check: ensure Map has Match_ID)
+    if 'Match_ID' not in gdf.columns and 'GEOID' in gdf.columns:
+         gdf['Match_ID'] = gdf['GEOID'].astype(str).str[-6:]
+    gdf['Match_ID'] = gdf['Match_ID'].astype(str)
 
-try:
-    df, gdf = load_data()
-except Exception as e:
-    st.error(f"⚠️ Error loading files. Did you upload 'tanc_data_clean.csv' and 'tanc_map_data.geojson'? Error: {e}")
-    st.stop()
+    # Perform the merge: Keep the Shapes (left), add the Data (right)
+    # suffixes=('', '_y') drops duplicate columns if they exist
+    full_map = gdf.merge(df, on='Match_ID', how='inner', suffixes=('', '_y'))
+    
+    return df, full_map
 
 # 3. DEBUGGING (Now safe to run because df exists)
 # This will show you the exact column names on the screen so we stop guessing.
