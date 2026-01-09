@@ -105,5 +105,108 @@ with c_map:
                 return base
 
             m = valid_map.explore(
-                column=target_col, cmap=ta
-                
+                column=target_col, cmap=target_cmap, scheme="quantiles", k=5,
+                tiles="CartoDB positron", tooltip=["TANC Local", "Match_ID", target_col],
+                popup=False, style_kwds={"style_function": style_fn},
+                location=st.session_state.map_center, zoom_start=st.session_state.map_zoom
+            )
+            st_folium(m, use_container_width=True, height=500)
+        else:
+            st.warning("No data.")
+
+with c_chart:
+    st.subheader("Demographics")
+    avail = [c for c in ["Black", "White", "Asian", "Hispanic"] if c in local_data.columns]
+    if avail:
+        c_data = local_data[avail].sum().reset_index()
+        c_data.columns = ["Group", "Count"]
+        colors = ["#d3d3d3"]*len(c_data)
+        for i,g in enumerate(c_data["Group"]):
+            if g in target_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
+        
+        fig = px.bar(c_data, x="Group", y="Count", text_auto='.2s')
+        fig.update_traces(marker_color=colors)
+        st.plotly_chart(fig, use_container_width=True)
+
+# =========================================================
+# 6. CLICKABLE CHARTS
+# =========================================================
+st.markdown("---")
+st.header("📊 Deep Dive: Click to Locate")
+st.write("👈 **Click any dot** on these charts to zoom the map.")
+
+d1, d2 = st.columns(2)
+
+def handle_click(event):
+    # CRITICAL FIX: Handle Dictionary Access for 'custom_data'
+    if event.selection and len(event.selection.points) > 0:
+        point = event.selection.points[0]
+        # Check if it's a dict and has keys (Streamlit update fix)
+        if isinstance(point, dict) and 'custom_data' in point:
+            clicked_id = point['custom_data'][0]
+            
+            target_shape = map_data[map_data["Match_ID"] == str(clicked_id)]
+            if not target_shape.empty:
+                centroid = target_shape.geometry.centroid.iloc[0]
+                st.session_state.map_center = [centroid.y, centroid.x]
+                st.session_state.map_zoom = 14
+                st.session_state.highlight_id = str(clicked_id)
+                st.rerun()
+
+with d1:
+    race = st.selectbox("Compare Rent Burden vs:", ["% Hispanic", "% Black", "% Asian", "% White"])
+    if race in local_data.columns and "Rent Burden" in local_data.columns:
+        fig = px.scatter(
+            local_data, x=race, y="Rent Burden", trendline="ols", 
+            color="TANC Local", hover_name="Match_ID",
+            title=f"{race} vs Rent Burden", custom_data=["Match_ID"] 
+        )
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        handle_click(event)
+
+with d2:
+    lang_choice = st.selectbox("Language Isolation vs Unemployment:", ["% Spanish LE", "% Asian LE"])
+    if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
+        fig = px.scatter(
+            local_data, x=lang_choice, y="Unemployment Rate", trendline="ols", 
+            color="TANC Local", hover_name="Match_ID",
+            title=f"{lang_choice} vs Unemployment", custom_data=["Match_ID"]
+        )
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        handle_click(event)
+
+# =========================================================
+# 7. PRIORITY TARGET LIST
+# =========================================================
+st.markdown("---")
+st.header("🔥 Priority Targets Table")
+
+if "Rent Burden" in local_data.columns:
+    crisis_data = local_data[
+        (local_data["Rent Burden"] > 35) & 
+        (local_data["Total"] > 500)
+    ].sort_values(by="Rent Burden", ascending=False)
+
+    if not crisis_data.empty:
+        show_cols = ["TANC Local", "Match_ID", "Rent Burden", "% Black", "% Hispanic", "% Asian LE", "Unemployment Rate"]
+        final_cols = [c for c in show_cols if c in crisis_data.columns]
+
+        event = st.dataframe(
+            crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
+            use_container_width=True, # Keeping this as it handles 'stretch' automatically in newer versions
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        if len(event.selection.rows) > 0:
+            idx = event.selection.rows[0]
+            selected_id = str(crisis_data.iloc[idx]["Match_ID"])
+            if selected_id != st.session_state.highlight_id:
+                target_shape = map_data[map_data["Match_ID"] == selected_id]
+                if not target_shape.empty:
+                    centroid = target_shape.geometry.centroid.iloc[0]
+                    st.session_state.map_center = [centroid.y, centroid.x]
+                    st.session_state.map_zoom = 14
+                    st.session_state.highlight_id = selected_id
+                    st.rerun()
