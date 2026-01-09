@@ -7,7 +7,7 @@ import warnings
 
 # 1. CONFIGURATION & SILENCE WARNINGS
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
-warnings.filterwarnings("ignore") # Silences the "scalar divide" math warnings
+warnings.filterwarnings("ignore")
 
 # 2. SESSION STATE
 if 'map_center' not in st.session_state:
@@ -50,11 +50,20 @@ except Exception as e:
 # =========================================================
 st.sidebar.title("TANC Dashboard")
 
+# --- MULTI-SELECT FILTER (UPDATED) ---
 if 'TANC Local' in df.columns:
-    local_opts = ["All"] + sorted(list(df['TANC Local'].unique()))
-    selected_local = st.sidebar.selectbox("Filter by Local", local_opts)
+    # Get all unique locals
+    all_locals = sorted(list(df['TANC Local'].unique()))
+    
+    # The Widget: Multiselect
+    selected_locals = st.sidebar.multiselect(
+        "Filter by Local(s):", 
+        options=all_locals,
+        default=[], # Default to empty (which we treat as "All")
+        placeholder="Choose locals (or leave empty for All)"
+    )
 else:
-    selected_local = "All"
+    selected_locals = []
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Map Layer")
@@ -73,17 +82,22 @@ opts = [k for k,v in metrics.items() if v[0] in df.columns]
 target_choice = st.sidebar.radio("Select Layer:", opts)
 target_col, target_cmap = metrics[target_choice]
 
-if selected_local != "All":
-    local_data = df[df['TANC Local'] == selected_local]
-    map_data = gdf[gdf['TANC Local'] == selected_local]
+# --- FILTER LOGIC (UPDATED) ---
+# If the list is NOT empty, filter to those locals. 
+# If it IS empty, show everything.
+if len(selected_locals) > 0:
+    local_data = df[df['TANC Local'].isin(selected_locals)]
+    map_data = gdf[gdf['TANC Local'].isin(selected_locals)]
+    display_title = ", ".join(selected_locals)
 else:
     local_data = df
     map_data = gdf
+    display_title = "All East Bay"
 
 # =========================================================
 # 5. MAIN DASHBOARD
 # =========================================================
-st.title(f"Composition: {selected_local}")
+st.title(f"Composition: {display_title}")
 
 # METRICS
 c1, c2, c3 = st.columns(3)
@@ -112,7 +126,6 @@ with c_map:
                 popup=False, style_kwds={"style_function": style_fn},
                 location=st.session_state.map_center, zoom_start=st.session_state.map_zoom
             )
-            # Using width=None to let streamlit_folium handle sizing naturally
             st_folium(m, use_container_width=True, height=500)
         else:
             st.warning("No data.")
@@ -129,10 +142,10 @@ with c_chart:
         
         fig = px.bar(c_data, x="Group", y="Count", text_auto='.2s')
         fig.update_traces(marker_color=colors)
-        st.plotly_chart(fig, width=None, use_container_width=True) # FIXED
+        st.plotly_chart(fig, width=None, use_container_width=True)
 
 # =========================================================
-# 6. CLICKABLE CHARTS (Data Cleaning Added)
+# 6. CLICKABLE CHARTS
 # =========================================================
 st.markdown("---")
 st.header("📊 Deep Dive: Click to Locate")
@@ -159,15 +172,12 @@ def handle_click(event):
 with d1:
     race = st.selectbox("Compare Rent Burden vs:", ["% Hispanic", "% Black", "% Asian", "% White"])
     if race in local_data.columns and "Rent Burden" in local_data.columns:
-        # CLEAN DATA: Drop NaNs to stop statsmodels from crashing
         clean_plot = local_data.dropna(subset=[race, "Rent Burden"])
-        
         fig = px.scatter(
             clean_plot, x=race, y="Rent Burden", 
-            trendline="ols" if len(clean_plot) > 2 else None, # Only draw line if enough data 
+            trendline="ols" if len(clean_plot) > 2 else None, 
             color="TANC Local", hover_name="Match_ID",
-            title=f"{race} vs Rent Burden", 
-            custom_data=["Match_ID"]
+            title=f"{race} vs Rent Burden", custom_data=["Match_ID"]
         )
         event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
@@ -175,15 +185,12 @@ with d1:
 with d2:
     lang_choice = st.selectbox("Language Isolation vs Unemployment:", ["% Spanish LE", "% Asian LE"])
     if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
-        # CLEAN DATA
         clean_plot = local_data.dropna(subset=[lang_choice, "Unemployment Rate"])
-        
         fig = px.scatter(
             clean_plot, x=lang_choice, y="Unemployment Rate", 
             trendline="ols" if len(clean_plot) > 2 else None,
             color="TANC Local", hover_name="Match_ID",
-            title=f"{lang_choice} vs Unemployment", 
-            custom_data=["Match_ID"]
+            title=f"{lang_choice} vs Unemployment", custom_data=["Match_ID"]
         )
         event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
