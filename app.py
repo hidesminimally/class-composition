@@ -67,12 +67,26 @@ c_map, c_chart = st.columns([2, 1])
 
 with c_map:
     st.subheader("Map View")
-    # We default to 'Total' since we know it exists. 
-    # If you want to map something else, change "Total" to a name from the list printed at the top of the app.
     map_col = "Total" 
     
     if map_col in map_data.columns:
-        m = map_data.explore(column=map_col, cmap="Blues", tiles="CartoDB positron")
+        # 1. Define exactly what we want to see when we hover
+        # We check which columns exist to avoid crashing
+        tooltip_cols = ["TANC Local"]
+        if "Total" in map_data.columns: tooltip_cols.append("Total")
+        if "Black" in map_data.columns: tooltip_cols.append("Black")
+        if "White" in map_data.columns: tooltip_cols.append("White")
+        if "Rent Burden" in map_data.columns: tooltip_cols.append("Rent Burden")
+
+        # 2. Render the map with the clean tooltip
+        m = map_data.explore(
+            column=map_col, 
+            cmap="Blues", 
+            tiles="CartoDB positron",
+            tooltip=tooltip_cols,  # <--- THIS FIXES THE GIANT POPUP
+            popup=False,           # Disable the click-popup to keep it clean
+            style_kwds={"fillOpacity": 0.6, "weight": 1} # Makes it look nicer
+        )
         st_folium(m, use_container_width=True, height=500)
     else:
         st.warning(f"Cannot map column '{map_col}' because it doesn't exist.")
