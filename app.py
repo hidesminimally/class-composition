@@ -115,6 +115,31 @@ with c_map:
     elif target_metric == "Rent Burden":
         plot_col = "Rent Burden"
         color_scale = "RdPu" # Red-Purple is often used for "Pain/Cost"
+        
+
+    
+    # FIX: Filter out tracts with 0 population to prevent the "Black Shape" bug
+    valid_map_data = map_data.copy()
+    if plot_col in valid_map_data.columns:
+        # Only show tracts that actually have data
+        valid_map_data = valid_map_data[valid_map_data[plot_col] > 0]
+    
+    if not valid_map_data.empty:
+        m = valid_map_data.explore(
+            column=plot_col,
+            cmap=color_scale,
+            scheme="quantiles", 
+            k=5,
+            tiles="CartoDB positron",
+            tooltip=["TANC Local", "Total", plot_col],
+            popup=False,
+            legend_kwds={"caption": target_metric},
+            # Change "black" to something lighter for the lines
+            style_kwds={"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"} 
+        )
+        st_folium(m, use_container_width=True, height=500)
+    else:
+        st.warning("No data found for this selection.")
 
     # 2. RENDER THE MAP
     # Only map if we have data to avoid the crash
@@ -137,15 +162,36 @@ with c_map:
         m = map_data.explore(color="#f0f0f0", tiles="CartoDB positron")
         st_folium(m, use_container_width=True, height=500)
 
+
 with c_chart:
     st.subheader("Demographics")
-    # Quick bar chart of race/class if columns exist
-    race_cols = ['Black', 'White', 'Asian', 'Hispanic']
-    existing_race_cols = [c for c in race_cols if c in local_data.columns]
     
-    if existing_race_cols:
-        long_data = local_data.melt(value_vars=existing_race_cols, var_name="Group", value_name="Count")
-        fig = px.bar(long_data, x="Group", y="Count", title="Population by Group")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Demographic columns (Black, White, Asian) not found.")
+    # 1. Filter data to the current view
+    # (We aggregate the numbers so the chart shows the Total for the selected Local)
+    chart_data = local_data[["Black", "White", "Asian", "Hispanic"]].sum().reset_index()
+    chart_data.columns = ["Group", "Count"]
+    
+    # 2. Highlight the bar that matches the Map
+    # If map is "% Black", we want the "Black" bar to be red/orange
+    bar_colors = ["#d3d3d3"] * len(chart_data) # Default all to grey
+    
+    if "Black" in target_metric: 
+        bar_colors[0] = "#ff7f0e" # Orange for Black
+    elif "White" in target_metric: 
+        bar_colors[1] = "#1f77b4" # Blue for White
+    elif "Asian" in target_metric: 
+        bar_colors[2] = "#2ca02c" # Green for Asian
+        
+    # 3. Render
+    fig = px.bar(
+        chart_data, 
+        x="Group", 
+        y="Count", 
+        title="Total Counts (Selected Area)",
+        text_auto='.2s'
+    )
+    # Apply the highlight colors
+    fig.update_traces(marker_color=bar_colors)
+    fig.update_layout(xaxis_title="", yaxis_title="")
+    
+    st.plotly_chart(fig, use_container_width=True)
