@@ -196,46 +196,52 @@ with c_chart:
     
     st.plotly_chart(fig, use_container_width=True)
 
-
-
-
 st.markdown("---")
-st.header("🔥 Top Organizing Targets (The 'Bleeding' Edge)")
-st.write("These are the specific tracts where tenants are paying >50% of their income on rent.")
+st.header("Organizing Targets")
+st.write("👈 **Click the checkbox** next to a row to zoom the map to that neighborhood.")
 
-# 1. FILTER: Find the Crisis Zones
-# We look for High Rent Burden (> 40%) and significant population
+# 1. FILTER & SORT (Same as before)
 crisis_data = local_data[
     (local_data["Rent Burden"] > 40) & 
     (local_data["Total"] > 500)
-].copy()
+].copy().sort_values(by="Rent Burden", ascending=False)
 
-# 2. SORT: Worst first
-crisis_data = crisis_data.sort_values(by="Rent Burden", ascending=False)
+# 2. SETUP ZOOM VARIABLES (Default to Oakland view)
+# If nothing is selected, we look at the whole city
+map_center = [37.8044, -122.2712] 
+map_zoom = 11
+highlight_tract = None
 
-# 3. DISPLAY: A clean, actionable list
 if not crisis_data.empty:
-    # Format the columns to be readable
     display_cols = ["TANC Local", "Match_ID", "Rent Burden", "Median Rent", "Total", "Black", "Hispanic"]
-    
-    # Filter columns that actually exist to prevent crashing
     final_cols = [c for c in display_cols if c in crisis_data.columns]
     
-    # Show the table
-    st.dataframe(
+    # 3. INTERACTIVE TABLE
+    # on_select="rerun" makes the app reload when you click a row
+    event = st.dataframe(
         crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        on_select="rerun", 
+        selection_mode="single-row"
     )
     
-    # 4. DOWNLOAD BUTTON (So you can print it and walk)
-    csv = crisis_data[final_cols].to_csv(index=False).encode('utf-8')
-    st.download_button(
-        "📥 Download Target List for Canvassing",
-        csv,
-        "tanc_targets.csv",
-        "text/csv",
-        key='download-csv'
-    )
+    # 4. HANDLE SELECTION
+    if len(event.selection.rows) > 0:
+        # Get the row index that was clicked
+        selected_index = event.selection.rows[0]
+        # Get the Match_ID from that row
+        selected_id = crisis_data.iloc[selected_index]["Match_ID"]
+        
+        # Find the geometry for this ID in the map data
+        target_shape = map_data[map_data["Match_ID"] == str(selected_id)]
+        
+        if not target_shape.empty:
+            # Calculate the center of that specific tract
+            centroid = target_shape.geometry.centroid.iloc[0]
+            map_center = [centroid.y, centroid.x]
+            map_zoom = 15 # Zoom in close!
+            highlight_tract = str(selected_id) # Save ID to highlight it
+            st.success(f"📍 Zooming to Tract {selected_id}...")
 else:
-    st.success("No tracts found with extreme rent burden (>40%) in this view.")
+    st.info("No high-burden tracts found in this view.")
