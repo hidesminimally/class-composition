@@ -13,10 +13,8 @@ warnings.filterwarnings("ignore")
 
 # 2. SESSION STATE
 if 'map_center' not in st.session_state:
-    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
-if 'map_zoom' not in st.session_state:
+    st.session_state.map_center = [37.8044, -122.2712]
     st.session_state.map_zoom = 11
-if 'highlight_id' not in st.session_state:
     st.session_state.highlight_id = None
 if 'is_zoomed' not in st.session_state:
     st.session_state.is_zoomed = False
@@ -62,14 +60,14 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("1. Base Map (Color)")
 
-# Base Metrics (Good for Choropleth)
+# Base Metrics
 base_metrics = {
     "% Hispanic": ("% Hispanic", "Reds"),
     "% Black": ("% Black", "Oranges"),
     "% Asian": ("% Asian", "Greens"),
     "% White": ("% White", "Blues"),
     "Total Population": ("Total", "Greys"),
-    "Rent Burden": ("Rent Burden", "RdPu"), # Can also be a base
+    "Rent Burden": ("Rent Burden", "RdPu"),
 }
 base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
 base_choice = st.sidebar.selectbox("Select Background:", base_opts)
@@ -78,7 +76,7 @@ base_col, base_cmap = base_metrics[base_choice]
 st.sidebar.subheader("2. Overlay (Stripes)")
 st.sidebar.caption("Stripes appear where condition is met.")
 
-# Overlay Metrics (Good for 'Crisis' thresholding)
+# Overlay Metrics
 overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
 overlay_threshold = 0
 if overlay_choice != "None":
@@ -114,7 +112,7 @@ if base_col in map_data.columns:
     valid_map = map_data[map_data[base_col] > 0]
     if not valid_map.empty:
         
-        # 1. DEFINE ZOOM
+        # 1. ZOOM LOGIC
         if not st.session_state.is_zoomed:
              loc = [37.8044, -122.2712]
              zoom = 11
@@ -123,15 +121,14 @@ if base_col in map_data.columns:
              loc = st.session_state.map_center
              zoom = st.session_state.map_zoom
 
-        # 2. HIGHLIGHT FUNCTION (Cyan Border for Selection)
+        # 2. HIGHLIGHT FUNCTION
         def style_fn(feature):
             base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
             if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
                 return {"fillOpacity": 0.7, "weight": 4, "color": "#00FFFF"} 
             return base
 
-        # 3. CREATE BASE MAP (COLOR)
-        # We use explore() to generate the base because it handles legends/quantiles well
+        # 3. BASE LAYER (Color)
         m = valid_map.explore(
             column=base_col, cmap=base_cmap, scheme="quantiles", k=5,
             tiles="CartoDB positron", tooltip=["TANC Local", "Match_ID", base_col],
@@ -139,17 +136,14 @@ if base_col in map_data.columns:
             location=loc, zoom_start=zoom
         )
 
-        # 4. ADD OVERLAY (STRIPES)
+        # 4. OVERLAY LAYER (Stripes)
         if overlay_choice != "None" and overlay_choice in map_data.columns:
-            # Filter for the crisis condition
             overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
             
             if not overlay_data.empty:
-                # Define the Pattern
-                stripe = StripePattern(angle=45, color='#333333', weight=2, opacity=1, space_color='transparent')
+                stripe = StripePattern(angle=45, color='#222222', weight=2, opacity=1, space_color='transparent')
                 stripe.add_to(m)
                 
-                # Add GeoJson Layer
                 folium.GeoJson(
                     overlay_data,
                     name=f"High {overlay_choice}",
@@ -157,11 +151,11 @@ if base_col in map_data.columns:
                         'fillPattern': stripe, 
                         'fillOpacity': 1, 
                         'color': 'black', 
-                        'weight': 1.5,
+                        'weight': 1.5, 
                         'opacity': 1
                     },
                     tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
-                    interactive=False # Let clicks fall through to the base layer
+                    interactive=False
                 ).add_to(m)
 
         st_folium(m, use_container_width=True, height=600)
@@ -179,14 +173,13 @@ if avail:
     c_data.columns = ["Group", "Count"]
     
     colors = ["#d3d3d3"]*len(c_data)
-    # Match colors to standard TANC palette
     for i,g in enumerate(c_data["Group"]):
         if g in base_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
     
     fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s')
     fig.update_traces(marker_color=colors)
     fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================
 # 8. DEEP DIVE
@@ -225,7 +218,7 @@ with d1:
             color="TANC Local", hover_name="Match_ID",
             title=f"{race} vs Rent", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
 
 with d2:
@@ -238,7 +231,7 @@ with d2:
             color="TANC Local", hover_name="Match_ID",
             title=f"Language vs Jobs", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
 
 # =========================================================
@@ -260,7 +253,7 @@ if "Rent Burden" in local_data.columns:
 
         event = st.dataframe(
             crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row"

@@ -6,3 +6,4 @@ streamlit-folium
 mapclassify
 folium
 statsmodels
+matplotlib
