@@ -33,6 +33,12 @@ def load_data():
     
     return df, full_map
 
+try:
+    df, gdf = load_data()
+except Exception as e:
+    st.error(f"⚠️ Error loading files. Did you upload 'tanc_data_clean.csv' and 'tanc_map_data.geojson'? Error: {e}")
+    st.stop()
+
 # 3. DEBUGGING (Now safe to run because df exists)
 # This will show you the exact column names on the screen so we stop guessing.
 st.write("✅ Available Columns:", df.columns.tolist())
