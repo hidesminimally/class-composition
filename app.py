@@ -9,13 +9,16 @@ import warnings
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
 warnings.filterwarnings("ignore")
 
-# 2. SESSION STATE
-# We use a specific flag 'is_zoomed' to know if we should force a zoom or stay wide
+# 2. SESSION STATE (The Safety Block)
+# We initialize these one by one to prevent KeyErrors
 if 'map_center' not in st.session_state:
-    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland Center
-    st.session_state.map_zoom = 12
+    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
+if 'map_zoom' not in st.session_state:
+    st.session_state.map_zoom = 11
+if 'highlight_id' not in st.session_state:
     st.session_state.highlight_id = None
-    st.session_state.is_zoomed = False 
+if 'is_zoomed' not in st.session_state:
+    st.session_state.is_zoomed = False
 
 # 3. LOAD DATA
 @st.cache_data
@@ -49,7 +52,6 @@ except Exception as e:
 # =========================================================
 st.sidebar.title("TANC Dashboard")
 
-# Filter
 if 'TANC Local' in df.columns:
     all_locals = sorted(list(df['TANC Local'].unique()))
     selected_locals = st.sidebar.multiselect("Filter by Local(s):", all_locals, default=[])
@@ -59,23 +61,19 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Map Data")
 
-# REORDERED FOR LOGIC
 metrics = {
-    # 1. CLASS / ECONOMIC (The most important)
+    # Economic
     "Rent Burden": ("Rent Burden", "RdPu"),
     "Unemployment Rate": ("Unemployment Rate", "YlOrRd"),
-    
-    # 2. RACE / DEMOGRAPHICS
-    "% Black": ("% Black", "Oranges"),
+    # Demographics
     "% Hispanic": ("% Hispanic", "Reds"),
+    "% Black": ("% Black", "Oranges"),
     "% Asian": ("% Asian", "Greens"),
     "% White": ("% White", "Blues"),
-    
-    # 3. LANGUAGE ISOLATION
+    # Language
     "% Spanish LE (Isolation)": ("% Spanish LE", "YlGn"),
     "% Asian LE (Isolation)": ("% Asian LE", "PuBuGn"),
-    
-    # 4. BASELINE
+    # Base
     "Total Population": ("Total", "Greys"),
 }
 opts = [k for k,v in metrics.items() if v[0] in df.columns]
@@ -104,7 +102,7 @@ c3.metric("Avg Unemployment", f"{local_data['Unemployment Rate'].mean():.1f}%" i
 c4.metric("Tracts", len(local_data))
 
 # =========================================================
-# 6. THE BIG MAP (FULL ROW)
+# 6. MAP (FULL WIDTH)
 # =========================================================
 st.markdown("### 🗺️ Territory Map")
 
@@ -118,17 +116,14 @@ if target_col in map_data.columns:
                 return {"fillOpacity": 0.7, "weight": 4, "color": "#00FFFF"} 
             return base
 
-        # Determine Zoom
-        # If user hasn't clicked anything, just show the bounds of the data
+        # Zoom Logic
         if not st.session_state.is_zoomed:
-             # Default wide view
+             # Wide View
              loc = [37.8044, -122.2712]
              zoom = 11
-             if len(selected_locals) > 0:
-                 # If filtered, slightly tighter zoom logic could go here
-                 zoom = 12
+             if len(selected_locals) > 0: zoom = 12
         else:
-             # User clicked something, so use the precise zoom
+             # Targeted View
              loc = st.session_state.map_center
              zoom = st.session_state.map_zoom
 
@@ -138,12 +133,12 @@ if target_col in map_data.columns:
             popup=False, style_kwds={"style_function": style_fn},
             location=loc, zoom_start=zoom
         )
-        st_folium(m, use_container_width=True, height=600) # Made it taller
+        st_folium(m, use_container_width=True, height=600)
     else:
         st.warning("No data.")
 
 # =========================================================
-# 7. DEMOGRAPHICS (OWN ROW, HORIZONTAL)
+# 7. DEMOGRAPHICS (HORIZONTAL BAR)
 # =========================================================
 st.markdown("### 👥 Demographics Breakdown")
 
@@ -152,38 +147,32 @@ if avail:
     c_data = local_data[avail].sum().reset_index()
     c_data.columns = ["Group", "Count"]
     
-    # Color logic
     colors = ["#d3d3d3"]*len(c_data)
     for i,g in enumerate(c_data["Group"]):
         if g in target_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
     
-    # Horizontal Bar Chart is better for this layout
-    fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s', title="Total Population by Group")
+    fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s')
     fig.update_traces(marker_color=colors)
-    fig.update_layout(height=300, margin=dict(l=0, r=0, t=30, b=0))
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+    # Fixed Deprecation Warning
+    st.plotly_chart(fig, width="stretch")
 
 # =========================================================
-# 8. DEEP DIVE (EXPLAINED)
+# 8. DEEP DIVE
 # =========================================================
 st.markdown("---")
 st.header("📊 Correlation Analysis")
-
-# Explainer Box
-with st.expander("ℹ️ How to read these charts (Click to Open)", expanded=True):
-    st.markdown("""
-    **Why this matters:** We want to know if specific groups are being targeted by high rents.
-    *   **Each dot** is one Census Tract (neighborhood).
-    *   **The Line:** If the line goes **UP ↗️**, it means neighborhoods with MORE of that group have HIGHER rent burdens.
-    *   **Strategy:** If the line is steep, that group is statistically facing worse conditions.
-    """)
+with st.expander("ℹ️ How to read this (Click to Open)", expanded=True):
+    st.markdown("**Steep Line UP ↗️** = That group faces significantly higher rent burdens.")
 
 d1, d2 = st.columns(2)
 
 def handle_click(event):
     if event.selection and len(event.selection.points) > 0:
         point = event.selection.points[0]
+        # Robust dict access for Streamlit 1.40+
         c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
+        
         if c_data:
             clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:]
             if clicked_id != st.session_state.highlight_id:
@@ -193,33 +182,33 @@ def handle_click(event):
                     st.session_state.map_center = [centroid.y, centroid.x]
                     st.session_state.map_zoom = 14
                     st.session_state.highlight_id = clicked_id
-                    st.session_state.is_zoomed = True # LOCK THE ZOOM
+                    st.session_state.is_zoomed = True # LOCK ZOOM
                     st.rerun()
 
 with d1:
-    race = st.selectbox("Does Race predict Rent Burden?", ["% Hispanic", "% Black", "% Asian", "% White"])
+    race = st.selectbox("Race vs Rent Burden:", ["% Hispanic", "% Black", "% Asian", "% White"])
     if race in local_data.columns and "Rent Burden" in local_data.columns:
         clean_plot = local_data.dropna(subset=[race, "Rent Burden"])
         fig = px.scatter(
             clean_plot, x=race, y="Rent Burden", 
             trendline="ols" if len(clean_plot) > 2 else None, 
             color="TANC Local", hover_name="Match_ID",
-            title=f"Correlation: {race} vs Rent", custom_data=["Match_ID"]
+            title=f"{race} vs Rent", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 with d2:
-    lang_choice = st.selectbox("Does Language Isolation predict Unemployment?", ["% Spanish LE", "% Asian LE"])
+    lang_choice = st.selectbox("Language vs Unemployment:", ["% Spanish LE", "% Asian LE"])
     if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
         clean_plot = local_data.dropna(subset=[lang_choice, "Unemployment Rate"])
         fig = px.scatter(
             clean_plot, x=lang_choice, y="Unemployment Rate", 
             trendline="ols" if len(clean_plot) > 2 else None,
             color="TANC Local", hover_name="Match_ID",
-            title=f"Correlation: Language vs Jobs", custom_data=["Match_ID"]
+            title=f"Language vs Jobs", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 # =========================================================
@@ -241,7 +230,7 @@ if "Rent Burden" in local_data.columns:
 
         event = st.dataframe(
             crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row"
@@ -255,7 +244,7 @@ if "Rent Burden" in local_data.columns:
                 if not target_shape.empty:
                     centroid = target_shape.geometry.centroid.iloc[0]
                     st.session_state.map_center = [centroid.y, centroid.x]
-                    st.session_state.map_zoom = 15 # Deep Zoom
+                    st.session_state.map_zoom = 15
                     st.session_state.highlight_id = selected_id
                     st.session_state.is_zoomed = True # LOCK ZOOM
                     st.rerun()
