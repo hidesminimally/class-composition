@@ -1,9 +1,7 @@
 streamlit
 pandas
 geopandas
-gspread
-google-auth
+plotly
 streamlit-folium
 mapclassify
 folium
-matplotlib
