@@ -8,273 +8,251 @@ import plotly.express as px
 import warnings
 
 # 1. CONFIGURATION
-st.set_page_config(page_title="TANC Class Comp", layout="wide")
+st.set_page_config(page_title="TANC Strategic Planner", layout="wide", page_icon="✊")
 warnings.filterwarnings("ignore")
 
-# 2. SESSION STATE
+# 2. SESSION STATE (MUST BE AT THE TOP)
+# We initialize all variables here to prevent crashes
+if 'selected_id' not in st.session_state:
+    st.session_state.selected_id = None
 if 'map_center' not in st.session_state:
-    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
+    st.session_state.map_center = [37.8044, -122.2712]
 if 'map_zoom' not in st.session_state:
     st.session_state.map_zoom = 11
-if 'highlight_id' not in st.session_state:
-    st.session_state.highlight_id = None
 if 'is_zoomed' not in st.session_state:
     st.session_state.is_zoomed = False
+
+# Custom CSS
+st.markdown("""
+<style>
+    .dossier-box { background-color: #f0f2f6; padding: 15px; border-radius: 8px; border-left: 5px solid #ff4b4b; }
+    .stat-val { font-size: 1.5rem; font-weight: bold; color: #333; }
+    .stat-lbl { font-size: 0.8rem; text-transform: uppercase; color: #666; }
+    .alert-box { padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold; }
+    .alert-red { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+</style>
+""", unsafe_allow_html=True)
 
 # 3. LOAD DATA
 @st.cache_data
 def load_data():
-    df = pd.read_csv("tanc_data_clean.csv")
-    gdf = gpd.read_file("tanc_map_data.geojson")
-    
-    def clean_id(x): return str(x).split('.')[0].zfill(6)[-6:]
-    df['Match_ID'] = df['Match_ID'].apply(clean_id)
-    map_id_col = 'GEOID' if 'GEOID' in gdf.columns else 'Match_ID'
-    if map_id_col in gdf.columns: gdf['Match_ID'] = gdf[map_id_col].apply(clean_id)
-    
-    # Pre-Calc Variables
-    for race in ["Black", "White", "Asian", "Hispanic"]: 
-        if race in df.columns and "Total" in df.columns:
-            df[f"% {race}"] = (df[race]/df["Total"].replace(0,1)*100).round(1)
-            
-    if "C16002_004E" in df.columns: df["% Spanish LE"] = (df["C16002_004E"]/df["C16002_001E"].replace(0,1)*100).round(1)
-    if "C16002_007E" in df.columns: df["% Asian LE"] = (df["C16002_007E"]/df["C16002_001E"].replace(0,1)*100).round(1)
-    
-    full_map = gdf.merge(df, on='Match_ID', how='inner', suffixes=('', '_y'))
-    return df, full_map
+    try:
+        df = pd.read_csv("tanc_data_clean.csv")
+        gdf = gpd.read_file("tanc_map_data.geojson")
+        
+        def clean_id(x): return str(x).split('.')[0].zfill(6)[-6:]
+        df['Match_ID'] = df['Match_ID'].apply(clean_id)
+        
+        map_id_col = 'GEOID' if 'GEOID' in gdf.columns else 'Match_ID'
+        if map_id_col in gdf.columns: gdf['Match_ID'] = gdf[map_id_col].apply(clean_id)
+        
+        # Pre-calc Percentages
+        if "Total" in df.columns:
+            for race in ["Black", "White", "Asian", "Hispanic"]: 
+                if race in df.columns:
+                    df[f"% {race}"] = (df[race]/df["Total"].replace(0,1)*100).round(1)
+        
+        full_map = gdf.merge(df, on='Match_ID', how='inner', suffixes=('', '_y'))
+        return df, full_map
+    except Exception as e:
+        return None, None
 
-try:
-    df, gdf = load_data()
-except Exception as e:
-    st.error(f"⚠️ Data Error: {e}"); st.stop()
+df, gdf = load_data()
+if df is None: 
+    st.error("Data missing. Please upload 'tanc_data_clean.csv' and 'tanc_map_data.geojson'.")
+    st.stop()
 
 # =========================================================
-# 4. SIDEBAR
+# 4. SIDEBAR: LAYERS & FILTERS
 # =========================================================
-st.sidebar.title("TANC Dashboard")
+st.sidebar.title("✊ TANC Planner")
 
-if 'TANC Local' in df.columns:
-    all_locals = sorted(list(df['TANC Local'].unique()))
-    selected_locals = st.sidebar.multiselect("Filter by Local(s):", all_locals, default=[])
-else:
-    selected_locals = []
-
-st.sidebar.markdown("---")
+# A. Base Layer (The Fill Color)
 st.sidebar.subheader("1. Base Map (Color)")
-
-# Base Metrics (Good for Choropleth)
 base_metrics = {
     "% Hispanic": ("% Hispanic", "Reds"),
     "% Black": ("% Black", "Oranges"),
     "% Asian": ("% Asian", "Greens"),
     "% White": ("% White", "Blues"),
     "Total Population": ("Total", "Greys"),
-    "Rent Burden": ("Rent Burden", "RdPu"), # Can also be a base
+    "Rent Burden": ("Rent Burden", "RdPu"), 
 }
 base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
-base_choice = st.sidebar.selectbox("Select Background:", base_opts)
+base_choice = st.sidebar.selectbox("Choose Background:", base_opts)
 base_col, base_cmap = base_metrics[base_choice]
 
+# B. Overlay Layer (The Pattern)
 st.sidebar.subheader("2. Overlay (Stripes)")
 st.sidebar.caption("Stripes appear where condition is met.")
-
-# Overlay Metrics (Good for 'Crisis' thresholding)
-overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
+overlay_type = st.sidebar.selectbox("Overlay Condition:", ["None", "Rent Burden", "Unemployment Rate"])
 overlay_threshold = 0
-if overlay_choice != "None":
-    overlay_threshold = st.sidebar.slider(f"Show stripes when {overlay_choice} is > X%", 0, 100, 30)
+if overlay_type != "None":
+    overlay_threshold = st.sidebar.slider(f"Threshold: {overlay_type} > X%", 0, 100, 30)
 
-# Data Filtering
-if len(selected_locals) > 0:
-    local_data = df[df['TANC Local'].isin(selected_locals)]
-    map_data = gdf[gdf['TANC Local'].isin(selected_locals)]
-    display_title = ", ".join(selected_locals)
-else:
-    local_data = df
-    map_data = gdf
-    display_title = "East Bay Overview"
+# C. Geography Filter
+st.sidebar.markdown("---")
+st.sidebar.subheader("3. Filter Turf")
+all_locals = sorted(list(df['TANC Local'].unique())) if 'TANC Local' in df.columns else []
+selected_locals = st.sidebar.multiselect("Locals:", all_locals)
+
+# APPLY FILTERS
+# 1. Split map into "Target" (Visible) and "Context" (Grey)
+target_gdf = gdf.copy()
+if selected_locals:
+    target_gdf = target_gdf[target_gdf['TANC Local'].isin(selected_locals)]
+
+context_gdf = gdf[~gdf['Match_ID'].isin(target_gdf['Match_ID'])]
 
 # =========================================================
 # 5. HEADER METRICS
 # =========================================================
-st.title(f"{display_title}")
-
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Population", f"{local_data['Total'].sum():,}" if 'Total' in local_data.columns else "N/A")
-c2.metric("Avg Rent Burden", f"{local_data['Rent Burden'].mean():.1f}%" if 'Rent Burden' in local_data.columns else "N/A")
-c3.metric("Avg Unemployment", f"{local_data['Unemployment Rate'].mean():.1f}%" if 'Unemployment Rate' in local_data.columns else "N/A")
-c4.metric("Tracts", len(local_data))
+c1.metric("Target Tracts", len(target_gdf))
+c2.metric("Total Population", f"{target_gdf['Total'].sum():,}")
+c3.metric("Avg Rent Burden", f"{target_gdf['Rent Burden'].mean():.1f}%" if 'Rent Burden' in target_gdf.columns else "N/A")
+
+# CSV Download
+csv = target_gdf.drop(columns='geometry').to_csv(index=False).encode('utf-8')
+c4.download_button("⬇️ Download Turf CSV", csv, "tanc_turf.csv", "text/csv")
+
+st.divider()
 
 # =========================================================
-# 6. BIVARIATE MAP (FULL WIDTH)
+# 6. MAP LOGIC (BIVARIATE)
 # =========================================================
-st.markdown(f"### 🗺️ Map: {base_choice} + {overlay_choice}")
 
-if base_col in map_data.columns:
-    valid_map = map_data[map_data[base_col] > 0]
-    if not valid_map.empty:
-        
-        # 1. DEFINE ZOOM
-        if not st.session_state.is_zoomed:
-             loc = [37.8044, -122.2712]
-             zoom = 11
-             if len(selected_locals) > 0: zoom = 12
-        else:
-             loc = st.session_state.map_center
-             zoom = st.session_state.map_zoom
+col_map, col_dossier = st.columns([2, 1])
 
-        # 2. HIGHLIGHT FUNCTION (Cyan Border for Selection)
-        def style_fn(feature):
-            base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
-            if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
-                return {"fillOpacity": 0.7, "weight": 4, "color": "#00FFFF"} 
-            return base
-
-        # 3. CREATE BASE MAP (COLOR)
-        # We use explore() to generate the base because it handles legends/quantiles well
-        m = valid_map.explore(
-            column=base_col, cmap=base_cmap, scheme="quantiles", k=5,
-            tiles="CartoDB positron", tooltip=["TANC Local", "Match_ID", base_col],
-            popup=False, style_kwds={"style_function": style_fn},
-            location=loc, zoom_start=zoom
-        )
-
-        # 4. ADD OVERLAY (STRIPES)
-        if overlay_choice != "None" and overlay_choice in map_data.columns:
-            # Filter for the crisis condition
-            overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
-            
-            if not overlay_data.empty:
-                # Define the Pattern
-                stripe = StripePattern(angle=45, color='#333333', weight=2, opacity=1, space_color='transparent')
-                stripe.add_to(m)
-                
-                # Add GeoJson Layer
-                folium.GeoJson(
-                    overlay_data,
-                    name=f"High {overlay_choice}",
-                    style_function=lambda x: {
-                        'fillPattern': stripe, 
-                        'fillOpacity': 1, 
-                        'color': 'black', 
-                        'weight': 1.5,
-                        'opacity': 1
-                    },
-                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
-                    interactive=False # Let clicks fall through to the base layer
-                ).add_to(m)
-
-        st_folium(m, use_container_width=True, height=600)
+with col_map:
+    st.subheader(f"🗺️ Map: {base_choice} + {overlay_type}")
+    
+    # 1. INIT MAP
+    if not st.session_state.is_zoomed:
+         loc = [37.8044, -122.2712]
+         zoom = 11
+         if len(selected_locals) > 0: zoom = 12
     else:
-        st.warning("No data.")
+         loc = st.session_state.map_center
+         zoom = st.session_state.map_zoom
 
-# =========================================================
-# 7. DEMOGRAPHICS (HORIZONTAL BAR)
-# =========================================================
-st.markdown("### 👥 Demographics Breakdown")
+    if base_col in target_gdf.columns:
+        m = target_gdf.explore(
+            column=base_col,
+            cmap=base_cmap,
+            scheme="quantiles",
+            k=5,
+            tiles="CartoDB positron",
+            tooltip=["TANC Local", "Match_ID", base_col, "Rent Burden"],
+            popup=False,
+            style_kwds={"fillOpacity": 0.7, "weight": 0.5, "color": "#666"},
+            location=loc,
+            zoom_start=zoom
+        )
+    else:
+        m = folium.Map(location=loc, zoom_start=zoom, tiles="CartoDB positron")
 
-avail = [c for c in ["Black", "White", "Asian", "Hispanic"] if c in local_data.columns]
-if avail:
-    c_data = local_data[avail].sum().reset_index()
-    c_data.columns = ["Group", "Count"]
+    # 2. ADD CONTEXT (GHOST) LAYER
+    # Shows the areas we filtered out in light grey
+    if not context_gdf.empty:
+        folium.GeoJson(
+            context_gdf,
+            style_function=lambda x: {'fillColor': '#f0f0f0', 'color': '#dddddd', 'weight': 0.5, 'fillOpacity': 0.2},
+            tooltip="Not in target",
+            interactive=False
+        ).add_to(m)
+
+    # 3. ADD OVERLAY (STRIPES)
+    # Check for the Overlay Condition (e.g. Rent Burden > 30)
+    check_col = "Rent Burden" if overlay_type == "Rent Burden" else "Unemployment Rate"
     
-    colors = ["#d3d3d3"]*len(c_data)
-    # Match colors to standard TANC palette
-    for i,g in enumerate(c_data["Group"]):
-        if g in base_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
+    if overlay_type != "None" and check_col in target_gdf.columns:
+        crisis_gdf = target_gdf[target_gdf[check_col] > overlay_threshold]
+        
+        if not crisis_gdf.empty:
+            stripe = StripePattern(angle=45, color='#222222', weight=2, opacity=1, space_color='transparent')
+            stripe.add_to(m)
+            
+            folium.GeoJson(
+                crisis_gdf,
+                name="Crisis Overlay",
+                style_function=lambda x: {
+                    'fillPattern': stripe, 
+                    'fillOpacity': 1, 
+                    'color': 'black', 
+                    'weight': 1.5,
+                    'opacity': 1
+                },
+                tooltip=f"⚠️ High {overlay_type} (> {overlay_threshold}%)",
+                interactive=True 
+            ).add_to(m)
+
+    # RENDER
+    st_data = st_folium(m, height=600, use_container_width=True, returned_objects=["last_object_clicked"])
+
+    # HANDLE CLICKS
+    if st_data.get("last_object_clicked"):
+        props = st_data["last_object_clicked"].get("properties", {})
+        if "Match_ID" in props:
+            # Update ID but DO NOT Force Zoom (keeps map stable while browsing)
+            st.session_state.selected_id = props["Match_ID"] 
+            # If you want auto-zoom on click, uncomment these:
+            # st.session_state.map_center = [st_data['last_object_clicked']['geometry']['type']]... (requires centroid math)
+            # st.session_state.is_zoomed = True
+
+# =========================================================
+# 7. NEIGHBORHOOD DOSSIER (RIGHT PANEL)
+# =========================================================
+with col_dossier:
+    st.subheader("📋 Tract Dossier")
     
-    fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s')
-    fig.update_traces(marker_color=colors)
-    fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig, width="stretch")
+    if st.session_state.selected_id:
+        row = df[df['Match_ID'] == st.session_state.selected_id]
+        if not row.empty:
+            row = row.iloc[0]
+            
+            # HEADER
+            st.markdown(f"### Tract: {row['Match_ID']}")
+            st.caption(f"Local: {row.get('TANC Local', 'Unknown')}")
+            st.markdown("---")
 
-# =========================================================
-# 8. DEEP DIVE
-# =========================================================
-st.markdown("---")
-st.header("📊 Correlation Analysis")
-with st.expander("ℹ️ How to read this (Click to Open)", expanded=True):
-    st.markdown("**Steep Line UP ↗️** = That group faces significantly higher rent burdens.")
+            # CRISIS CHECK
+            r_burden = row.get("Rent Burden", 0)
+            unemp = row.get("Unemployment Rate", 0)
+            
+            col_a, col_b = st.columns(2)
+            col_a.metric("Rent Burden", f"{r_burden}%")
+            col_b.metric("Unemployment", f"{unemp}%")
 
-d1, d2 = st.columns(2)
+            if overlay_type != "None":
+                val = row.get(check_col, 0)
+                if val > overlay_threshold:
+                    st.markdown(f'<div class="alert-box alert-red">⚠️ ABOVE THRESHOLD ({val}%)</div>', unsafe_allow_html=True)
+            
+            # LANGUAGE ALERT
+            if row.get("% Spanish LE", 0) > 15:
+                 st.info("🇪🇸 **High Spanish Isolation:** Bring bilingual flyers.")
+            elif row.get("% Asian LE", 0) > 15:
+                 st.info("🌏 **High Asian Lang Isolation:** Bring translation sheets.")
+            else:
+                 st.success("✅ **Standard Packet:** English primarily.")
 
-def handle_click(event):
-    if event.selection and len(event.selection.points) > 0:
-        point = event.selection.points[0]
-        c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
-        
-        if c_data:
-            clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:]
-            if clicked_id != st.session_state.highlight_id:
-                target_shape = map_data[map_data["Match_ID"] == clicked_id]
-                if not target_shape.empty:
-                    centroid = target_shape.geometry.centroid.iloc[0]
-                    st.session_state.map_center = [centroid.y, centroid.x]
-                    st.session_state.map_zoom = 14
-                    st.session_state.highlight_id = clicked_id
-                    st.session_state.is_zoomed = True # LOCK ZOOM
-                    st.rerun()
+            # DEMOGRAPHICS CHART
+            st.markdown("#### Demographics")
+            race_cols = ["% Black", "% White", "% Hispanic", "% Asian"]
+            present_cols = [c for c in race_cols if c in row]
+            if present_cols:
+                vals = row[present_cols].values
+                names = [c.replace("% ", "") for c in present_cols]
+                fig = px.pie(values=vals, names=names, hole=0.5)
+                fig.update_layout(height=250, margin=dict(t=0,b=0,l=0,r=0), showlegend=True)
+                # Updated for new Streamlit version
+                st.plotly_chart(fig, width="stretch") 
 
-with d1:
-    race = st.selectbox("Race vs Rent Burden:", ["% Hispanic", "% Black", "% Asian", "% White"])
-    if race in local_data.columns and "Rent Burden" in local_data.columns:
-        clean_plot = local_data.dropna(subset=[race, "Rent Burden"])
-        fig = px.scatter(
-            clean_plot, x=race, y="Rent Burden", 
-            trendline="ols" if len(clean_plot) > 2 else None, 
-            color="TANC Local", hover_name="Match_ID",
-            title=f"{race} vs Rent", custom_data=["Match_ID"]
-        )
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
-        handle_click(event)
-
-with d2:
-    lang_choice = st.selectbox("Language vs Unemployment:", ["% Spanish LE", "% Asian LE"])
-    if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
-        clean_plot = local_data.dropna(subset=[lang_choice, "Unemployment Rate"])
-        fig = px.scatter(
-            clean_plot, x=lang_choice, y="Unemployment Rate", 
-            trendline="ols" if len(clean_plot) > 2 else None,
-            color="TANC Local", hover_name="Match_ID",
-            title=f"Language vs Jobs", custom_data=["Match_ID"]
-        )
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
-        handle_click(event)
-
-# =========================================================
-# 9. TARGET TABLE
-# =========================================================
-st.markdown("---")
-st.header("🔥 High-Priority Targets")
-st.caption("Neighborhoods with >35% Rent Burden and >500 people.")
-
-if "Rent Burden" in local_data.columns:
-    crisis_data = local_data[
-        (local_data["Rent Burden"] > 35) & 
-        (local_data["Total"] > 500)
-    ].sort_values(by="Rent Burden", ascending=False)
-
-    if not crisis_data.empty:
-        show_cols = ["TANC Local", "Match_ID", "Rent Burden", "% Black", "% Hispanic", "% Asian LE", "Unemployment Rate"]
-        final_cols = [c for c in show_cols if c in crisis_data.columns]
-
-        event = st.dataframe(
-            crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            width="stretch",
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row"
-        )
-        
-        if len(event.selection.rows) > 0:
-            idx = event.selection.rows[0]
-            selected_id = str(crisis_data.iloc[idx]["Match_ID"])
-            if selected_id != st.session_state.highlight_id:
-                target_shape = map_data[map_data["Match_ID"] == selected_id]
-                if not target_shape.empty:
-                    centroid = target_shape.geometry.centroid.iloc[0]
-                    st.session_state.map_center = [centroid.y, centroid.x]
-                    st.session_state.map_zoom = 15
-                    st.session_state.highlight_id = selected_id
-                    st.session_state.is_zoomed = True # LOCK ZOOM
-                    st.rerun()
+    else:
+        st.info("👈 Click a neighborhood to generate a dossier.")
+        st.markdown("""
+        **Legend:**
+        *   **Colors:** Base demographic density.
+        *   **Stripes (///):** High crisis levels.
+        *   **Grey:** Areas filtered out.
+        """)
