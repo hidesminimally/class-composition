@@ -4,6 +4,8 @@ import geopandas as gpd
 import plotly.express as px
 from streamlit_folium import st_folium
 
+# DEBUGGING: Print columns to the app so you can see them
+st.write("Current Columns:", df.columns.tolist()
 # PAGE CONFIG
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
 
@@ -50,7 +52,7 @@ col_map, col_charts = st.columns([2, 1])
 with col_map:
     st.subheader("Territory Map")
     # This renders the map inside the app
-    m = map_data.explore(column="Rent Burden", cmap="Reds", tiles="CartoDB positron")
+    m = map_data.explore(column="Total", cmap="Blues", tiles="CartoDB positron")
     st_folium(m, use_container_width=True, height=500)
 
 with col_charts:
