@@ -3,9 +3,11 @@ import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
 import plotly.express as px
+import warnings
 
-# 1. CONFIGURATION
+# 1. CONFIGURATION & SILENCE WARNINGS
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
+warnings.filterwarnings("ignore") # Silences the "scalar divide" math warnings
 
 # 2. SESSION STATE
 if 'map_center' not in st.session_state:
@@ -19,7 +21,7 @@ def load_data():
     df = pd.read_csv("tanc_data_clean.csv")
     gdf = gpd.read_file("tanc_map_data.geojson")
     
-    # Clean IDs (Ensure they are 6-digit strings)
+    # ID Cleaning
     def clean_id(x): return str(x).split('.')[0].zfill(6)[-6:]
     df['Match_ID'] = df['Match_ID'].apply(clean_id)
     map_id_col = 'GEOID' if 'GEOID' in gdf.columns else 'Match_ID'
@@ -110,7 +112,7 @@ with c_map:
                 popup=False, style_kwds={"style_function": style_fn},
                 location=st.session_state.map_center, zoom_start=st.session_state.map_zoom
             )
-            # st_folium doesn't use width='stretch' yet, it uses use_container_width=True
+            # Using width=None to let streamlit_folium handle sizing naturally
             st_folium(m, use_container_width=True, height=500)
         else:
             st.warning("No data.")
@@ -127,10 +129,10 @@ with c_chart:
         
         fig = px.bar(c_data, x="Group", y="Count", text_auto='.2s')
         fig.update_traces(marker_color=colors)
-        st.plotly_chart(fig, width="stretch") # Updated to remove warning
+        st.plotly_chart(fig, width=None, use_container_width=True) # FIXED
 
 # =========================================================
-# 6. CLICKABLE CHARTS (FIXED)
+# 6. CLICKABLE CHARTS (Data Cleaning Added)
 # =========================================================
 st.markdown("---")
 st.header("📊 Deep Dive: Click to Locate")
@@ -141,14 +143,10 @@ d1, d2 = st.columns(2)
 def handle_click(event):
     if event.selection and len(event.selection.points) > 0:
         point = event.selection.points[0]
-        # Robust check for custom_data
-        # Streamlit 1.40+ returns dicts, not objects
         c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
         
         if c_data:
-            clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:] # Ensure format matches
-            
-            # ONLY RE-RUN IF IT'S A NEW CLICK (Prevents Loops)
+            clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:]
             if clicked_id != st.session_state.highlight_id:
                 target_shape = map_data[map_data["Match_ID"] == clicked_id]
                 if not target_shape.empty:
@@ -156,32 +154,38 @@ def handle_click(event):
                     st.session_state.map_center = [centroid.y, centroid.x]
                     st.session_state.map_zoom = 14
                     st.session_state.highlight_id = clicked_id
-                    st.rerun() # Force Map Update
+                    st.rerun()
 
 with d1:
     race = st.selectbox("Compare Rent Burden vs:", ["% Hispanic", "% Black", "% Asian", "% White"])
     if race in local_data.columns and "Rent Burden" in local_data.columns:
+        # CLEAN DATA: Drop NaNs to stop statsmodels from crashing
+        clean_plot = local_data.dropna(subset=[race, "Rent Burden"])
+        
         fig = px.scatter(
-            local_data, x=race, y="Rent Burden", trendline="ols", 
+            clean_plot, x=race, y="Rent Burden", 
+            trendline="ols" if len(clean_plot) > 2 else None, # Only draw line if enough data 
             color="TANC Local", hover_name="Match_ID",
             title=f"{race} vs Rent Burden", 
-            custom_data=["Match_ID"] # THIS SENDS THE ID TO THE CLICK EVENT
+            custom_data=["Match_ID"]
         )
-        # Updated to width="stretch"
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
 
 with d2:
     lang_choice = st.selectbox("Language Isolation vs Unemployment:", ["% Spanish LE", "% Asian LE"])
     if "Unemployment Rate" in local_data.columns and lang_choice in local_data.columns:
+        # CLEAN DATA
+        clean_plot = local_data.dropna(subset=[lang_choice, "Unemployment Rate"])
+        
         fig = px.scatter(
-            local_data, x=lang_choice, y="Unemployment Rate", trendline="ols", 
+            clean_plot, x=lang_choice, y="Unemployment Rate", 
+            trendline="ols" if len(clean_plot) > 2 else None,
             color="TANC Local", hover_name="Match_ID",
             title=f"{lang_choice} vs Unemployment", 
             custom_data=["Match_ID"]
         )
-        # Updated to width="stretch"
-        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
         handle_click(event)
 
 # =========================================================
@@ -202,7 +206,7 @@ if "Rent Burden" in local_data.columns:
 
         event = st.dataframe(
             crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            width="stretch", # Updated from use_container_width
+            use_container_width=True,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row"
@@ -211,8 +215,6 @@ if "Rent Burden" in local_data.columns:
         if len(event.selection.rows) > 0:
             idx = event.selection.rows[0]
             selected_id = str(crisis_data.iloc[idx]["Match_ID"])
-            
-            # ONLY RE-RUN IF NEW CLICK
             if selected_id != st.session_state.highlight_id:
                 target_shape = map_data[map_data["Match_ID"] == selected_id]
                 if not target_shape.empty:
@@ -221,4 +223,3 @@ if "Rent Burden" in local_data.columns:
                     st.session_state.map_zoom = 14
                     st.session_state.highlight_id = selected_id
                     st.rerun()
-                    
