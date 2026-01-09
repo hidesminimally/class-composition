@@ -19,7 +19,7 @@ def load_data():
     df = pd.read_csv("tanc_data_clean.csv")
     gdf = gpd.read_file("tanc_map_data.geojson")
     
-    # Clean IDs
+    # Clean IDs (Ensure they are 6-digit strings)
     def clean_id(x): return str(x).split('.')[0].zfill(6)[-6:]
     df['Match_ID'] = df['Match_ID'].apply(clean_id)
     map_id_col = 'GEOID' if 'GEOID' in gdf.columns else 'Match_ID'
@@ -110,6 +110,7 @@ with c_map:
                 popup=False, style_kwds={"style_function": style_fn},
                 location=st.session_state.map_center, zoom_start=st.session_state.map_zoom
             )
+            # st_folium doesn't use width='stretch' yet, it uses use_container_width=True
             st_folium(m, use_container_width=True, height=500)
         else:
             st.warning("No data.")
@@ -126,10 +127,10 @@ with c_chart:
         
         fig = px.bar(c_data, x="Group", y="Count", text_auto='.2s')
         fig.update_traces(marker_color=colors)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch") # Updated to remove warning
 
 # =========================================================
-# 6. CLICKABLE CHARTS
+# 6. CLICKABLE CHARTS (FIXED)
 # =========================================================
 st.markdown("---")
 st.header("📊 Deep Dive: Click to Locate")
@@ -138,20 +139,24 @@ st.write("👈 **Click any dot** on these charts to zoom the map.")
 d1, d2 = st.columns(2)
 
 def handle_click(event):
-    # CRITICAL FIX: Handle Dictionary Access for 'custom_data'
     if event.selection and len(event.selection.points) > 0:
         point = event.selection.points[0]
-        # Check if it's a dict and has keys (Streamlit update fix)
-        if isinstance(point, dict) and 'custom_data' in point:
-            clicked_id = point['custom_data'][0]
+        # Robust check for custom_data
+        # Streamlit 1.40+ returns dicts, not objects
+        c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
+        
+        if c_data:
+            clicked_id = str(c_data[0]).split('.')[0].zfill(6)[-6:] # Ensure format matches
             
-            target_shape = map_data[map_data["Match_ID"] == str(clicked_id)]
-            if not target_shape.empty:
-                centroid = target_shape.geometry.centroid.iloc[0]
-                st.session_state.map_center = [centroid.y, centroid.x]
-                st.session_state.map_zoom = 14
-                st.session_state.highlight_id = str(clicked_id)
-                st.rerun()
+            # ONLY RE-RUN IF IT'S A NEW CLICK (Prevents Loops)
+            if clicked_id != st.session_state.highlight_id:
+                target_shape = map_data[map_data["Match_ID"] == clicked_id]
+                if not target_shape.empty:
+                    centroid = target_shape.geometry.centroid.iloc[0]
+                    st.session_state.map_center = [centroid.y, centroid.x]
+                    st.session_state.map_zoom = 14
+                    st.session_state.highlight_id = clicked_id
+                    st.rerun() # Force Map Update
 
 with d1:
     race = st.selectbox("Compare Rent Burden vs:", ["% Hispanic", "% Black", "% Asian", "% White"])
@@ -159,9 +164,11 @@ with d1:
         fig = px.scatter(
             local_data, x=race, y="Rent Burden", trendline="ols", 
             color="TANC Local", hover_name="Match_ID",
-            title=f"{race} vs Rent Burden", custom_data=["Match_ID"] 
+            title=f"{race} vs Rent Burden", 
+            custom_data=["Match_ID"] # THIS SENDS THE ID TO THE CLICK EVENT
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        # Updated to width="stretch"
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 with d2:
@@ -170,9 +177,11 @@ with d2:
         fig = px.scatter(
             local_data, x=lang_choice, y="Unemployment Rate", trendline="ols", 
             color="TANC Local", hover_name="Match_ID",
-            title=f"{lang_choice} vs Unemployment", custom_data=["Match_ID"]
+            title=f"{lang_choice} vs Unemployment", 
+            custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        # Updated to width="stretch"
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 # =========================================================
@@ -193,7 +202,7 @@ if "Rent Burden" in local_data.columns:
 
         event = st.dataframe(
             crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            use_container_width=True, # Keeping this as it handles 'stretch' automatically in newer versions
+            width="stretch", # Updated from use_container_width
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row"
@@ -202,6 +211,8 @@ if "Rent Burden" in local_data.columns:
         if len(event.selection.rows) > 0:
             idx = event.selection.rows[0]
             selected_id = str(crisis_data.iloc[idx]["Match_ID"])
+            
+            # ONLY RE-RUN IF NEW CLICK
             if selected_id != st.session_state.highlight_id:
                 target_shape = map_data[map_data["Match_ID"] == selected_id]
                 if not target_shape.empty:
@@ -210,3 +221,4 @@ if "Rent Burden" in local_data.columns:
                     st.session_state.map_zoom = 14
                     st.session_state.highlight_id = selected_id
                     st.rerun()
+                    
