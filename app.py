@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
+import folium
+from folium.plugins import StripePattern
 import plotly.express as px
 import warnings
 
@@ -9,8 +11,7 @@ import warnings
 st.set_page_config(page_title="TANC Class Comp", layout="wide")
 warnings.filterwarnings("ignore")
 
-# 2. SESSION STATE (The Safety Block)
-# We initialize these one by one to prevent KeyErrors
+# 2. SESSION STATE
 if 'map_center' not in st.session_state:
     st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
 if 'map_zoom' not in st.session_state:
@@ -59,26 +60,29 @@ else:
     selected_locals = []
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Map Data")
+st.sidebar.subheader("1. Base Map (Color)")
 
-metrics = {
-    # Economic
-    "Rent Burden": ("Rent Burden", "RdPu"),
-    "Unemployment Rate": ("Unemployment Rate", "YlOrRd"),
-    # Demographics
+# Base Metrics (Good for Choropleth)
+base_metrics = {
     "% Hispanic": ("% Hispanic", "Reds"),
     "% Black": ("% Black", "Oranges"),
     "% Asian": ("% Asian", "Greens"),
     "% White": ("% White", "Blues"),
-    # Language
-    "% Spanish LE (Isolation)": ("% Spanish LE", "YlGn"),
-    "% Asian LE (Isolation)": ("% Asian LE", "PuBuGn"),
-    # Base
     "Total Population": ("Total", "Greys"),
+    "Rent Burden": ("Rent Burden", "RdPu"), # Can also be a base
 }
-opts = [k for k,v in metrics.items() if v[0] in df.columns]
-target_choice = st.sidebar.radio("Show on Map:", opts)
-target_col, target_cmap = metrics[target_choice]
+base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
+base_choice = st.sidebar.selectbox("Select Background:", base_opts)
+base_col, base_cmap = base_metrics[base_choice]
+
+st.sidebar.subheader("2. Overlay (Stripes)")
+st.sidebar.caption("Stripes appear where condition is met.")
+
+# Overlay Metrics (Good for 'Crisis' thresholding)
+overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
+overlay_threshold = 0
+if overlay_choice != "None":
+    overlay_threshold = st.sidebar.slider(f"Show stripes when {overlay_choice} is > X%", 0, 100, 30)
 
 # Data Filtering
 if len(selected_locals) > 0:
@@ -102,37 +106,64 @@ c3.metric("Avg Unemployment", f"{local_data['Unemployment Rate'].mean():.1f}%" i
 c4.metric("Tracts", len(local_data))
 
 # =========================================================
-# 6. MAP (FULL WIDTH)
+# 6. BIVARIATE MAP (FULL WIDTH)
 # =========================================================
-st.markdown("### 🗺️ Territory Map")
+st.markdown(f"### 🗺️ Map: {base_choice} + {overlay_choice}")
 
-if target_col in map_data.columns:
-    valid_map = map_data[map_data[target_col] > 0]
+if base_col in map_data.columns:
+    valid_map = map_data[map_data[base_col] > 0]
     if not valid_map.empty:
         
+        # 1. DEFINE ZOOM
+        if not st.session_state.is_zoomed:
+             loc = [37.8044, -122.2712]
+             zoom = 11
+             if len(selected_locals) > 0: zoom = 12
+        else:
+             loc = st.session_state.map_center
+             zoom = st.session_state.map_zoom
+
+        # 2. HIGHLIGHT FUNCTION (Cyan Border for Selection)
         def style_fn(feature):
             base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
             if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
                 return {"fillOpacity": 0.7, "weight": 4, "color": "#00FFFF"} 
             return base
 
-        # Zoom Logic
-        if not st.session_state.is_zoomed:
-             # Wide View
-             loc = [37.8044, -122.2712]
-             zoom = 11
-             if len(selected_locals) > 0: zoom = 12
-        else:
-             # Targeted View
-             loc = st.session_state.map_center
-             zoom = st.session_state.map_zoom
-
+        # 3. CREATE BASE MAP (COLOR)
+        # We use explore() to generate the base because it handles legends/quantiles well
         m = valid_map.explore(
-            column=target_col, cmap=target_cmap, scheme="quantiles", k=5,
-            tiles="CartoDB positron", tooltip=["TANC Local", "Match_ID", target_col],
+            column=base_col, cmap=base_cmap, scheme="quantiles", k=5,
+            tiles="CartoDB positron", tooltip=["TANC Local", "Match_ID", base_col],
             popup=False, style_kwds={"style_function": style_fn},
             location=loc, zoom_start=zoom
         )
+
+        # 4. ADD OVERLAY (STRIPES)
+        if overlay_choice != "None" and overlay_choice in map_data.columns:
+            # Filter for the crisis condition
+            overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
+            
+            if not overlay_data.empty:
+                # Define the Pattern
+                stripe = StripePattern(angle=45, color='#333333', weight=2, opacity=1, space_color='transparent')
+                stripe.add_to(m)
+                
+                # Add GeoJson Layer
+                folium.GeoJson(
+                    overlay_data,
+                    name=f"High {overlay_choice}",
+                    style_function=lambda x: {
+                        'fillPattern': stripe, 
+                        'fillOpacity': 1, 
+                        'color': 'black', 
+                        'weight': 1.5,
+                        'opacity': 1
+                    },
+                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
+                    interactive=False # Let clicks fall through to the base layer
+                ).add_to(m)
+
         st_folium(m, use_container_width=True, height=600)
     else:
         st.warning("No data.")
@@ -148,13 +179,13 @@ if avail:
     c_data.columns = ["Group", "Count"]
     
     colors = ["#d3d3d3"]*len(c_data)
+    # Match colors to standard TANC palette
     for i,g in enumerate(c_data["Group"]):
-        if g in target_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
+        if g in base_choice: colors[i] = {"Black":"#ff7f0e","White":"#1f77b4","Asian":"#2ca02c","Hispanic":"#d62728"}.get(g,"red")
     
     fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s')
     fig.update_traces(marker_color=colors)
     fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
-    # Fixed Deprecation Warning
     st.plotly_chart(fig, width="stretch")
 
 # =========================================================
@@ -170,7 +201,6 @@ d1, d2 = st.columns(2)
 def handle_click(event):
     if event.selection and len(event.selection.points) > 0:
         point = event.selection.points[0]
-        # Robust dict access for Streamlit 1.40+
         c_data = point.get('custom_data') if isinstance(point, dict) else getattr(point, 'custom_data', None)
         
         if c_data:
