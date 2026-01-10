@@ -3,7 +3,6 @@ import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
 import folium
-from folium.plugins import StripePattern
 import plotly.express as px
 import warnings
 
@@ -13,8 +12,10 @@ warnings.filterwarnings("ignore")
 
 # 2. SESSION STATE
 if 'map_center' not in st.session_state:
-    st.session_state.map_center = [37.8044, -122.2712]
+    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
+if 'map_zoom' not in st.session_state:
     st.session_state.map_zoom = 11
+if 'highlight_id' not in st.session_state:
     st.session_state.highlight_id = None
 if 'is_zoomed' not in st.session_state:
     st.session_state.is_zoomed = False
@@ -73,14 +74,14 @@ base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
 base_choice = st.sidebar.selectbox("Select Background:", base_opts)
 base_col, base_cmap = base_metrics[base_choice]
 
-st.sidebar.subheader("2. Overlay (Stripes)")
-st.sidebar.caption("Stripes appear where condition is met.")
+st.sidebar.subheader("2. Overlay (Borders)")
+st.sidebar.caption("Highlights tracts that meet the condition.")
 
 # Overlay Metrics
 overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
 overlay_threshold = 0
 if overlay_choice != "None":
-    overlay_threshold = st.sidebar.slider(f"Show stripes when {overlay_choice} is > X%", 0, 100, 30)
+    overlay_threshold = st.sidebar.slider(f"Highlight when {overlay_choice} is > X%", 0, 100, 30)
 
 # Data Filtering
 if len(selected_locals) > 0:
@@ -121,7 +122,7 @@ if base_col in map_data.columns:
              loc = st.session_state.map_center
              zoom = st.session_state.map_zoom
 
-        # 2. HIGHLIGHT FUNCTION
+        # 2. HIGHLIGHT FUNCTION (Cyan Selection)
         def style_fn(feature):
             base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
             if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
@@ -136,29 +137,26 @@ if base_col in map_data.columns:
             location=loc, zoom_start=zoom
         )
 
-        # 4. OVERLAY LAYER (Stripes)
+        # 4. OVERLAY LAYER (Dashed Borders)
+        # This replaces the buggy StripePattern with a robust "Dashed Line" overlay
         if overlay_choice != "None" and overlay_choice in map_data.columns:
             overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
             
             if not overlay_data.empty:
-                stripe = StripePattern(angle=45, color='#222222', weight=2, opacity=1, space_color='transparent')
-                stripe.add_to(m)
-                
                 folium.GeoJson(
                     overlay_data,
                     name=f"High {overlay_choice}",
                     style_function=lambda x: {
-                        'fillPattern': stripe, 
-                        'fillOpacity': 1, 
-                        'color': 'black', 
-                        'weight': 1.5, 
-                        'opacity': 1
+                        'color': '#2c3e50',      # Dark Grey Border
+                        'weight': 2.5,           # Thicker than normal
+                        'dashArray': '5, 5',     # <--- THIS MAKES IT DASHED/HASHED
+                        'fillOpacity': 0,        # Transparent fill (See race underneath)
+                        'interactive': False
                     },
-                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
-                    interactive=False
+                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)"
                 ).add_to(m)
 
-        st_folium(m, use_container_width=True, height=600)
+        st_folium(m, width="stretch", height=600)
     else:
         st.warning("No data.")
 
@@ -179,7 +177,7 @@ if avail:
     fig = px.bar(c_data, x="Count", y="Group", orientation='h', text_auto='.2s')
     fig.update_traces(marker_color=colors)
     fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # =========================================================
 # 8. DEEP DIVE
@@ -205,7 +203,7 @@ def handle_click(event):
                     st.session_state.map_center = [centroid.y, centroid.x]
                     st.session_state.map_zoom = 14
                     st.session_state.highlight_id = clicked_id
-                    st.session_state.is_zoomed = True # LOCK ZOOM
+                    st.session_state.is_zoomed = True
                     st.rerun()
 
 with d1:
@@ -218,7 +216,7 @@ with d1:
             color="TANC Local", hover_name="Match_ID",
             title=f"{race} vs Rent", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 with d2:
@@ -231,7 +229,7 @@ with d2:
             color="TANC Local", hover_name="Match_ID",
             title=f"Language vs Jobs", custom_data=["Match_ID"]
         )
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        event = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points")
         handle_click(event)
 
 # =========================================================
@@ -253,7 +251,7 @@ if "Rent Burden" in local_data.columns:
 
         event = st.dataframe(
             crisis_data[final_cols].style.background_gradient(subset=["Rent Burden"], cmap="Reds"),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row"
@@ -269,5 +267,5 @@ if "Rent Burden" in local_data.columns:
                     st.session_state.map_center = [centroid.y, centroid.x]
                     st.session_state.map_zoom = 15
                     st.session_state.highlight_id = selected_id
-                    st.session_state.is_zoomed = True # LOCK ZOOM
+                    st.session_state.is_zoomed = True
                     st.rerun()
