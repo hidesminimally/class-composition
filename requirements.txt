@@ -7,3 +7,4 @@ mapclassify
 folium
 statsmodels
 matplotlib
+dash
