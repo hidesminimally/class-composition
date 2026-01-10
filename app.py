@@ -3,17 +3,17 @@ import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
 import folium
+from folium.plugins import StripePattern
 import plotly.express as px
 import warnings
 
 # 1. CONFIGURATION
-st.set_page_config(page_title="TANC Class Comp", layout="wide")
+st.set_page_config(page_title="TANC Class Comp", layout="wide", page_icon="✊")
 warnings.filterwarnings("ignore")
 
 # 2. SESSION STATE
 if 'map_center' not in st.session_state:
-    st.session_state.map_center = [37.8044, -122.2712] # Default Oakland
-if 'map_zoom' not in st.session_state:
+    st.session_state.map_center = [37.8044, -122.2712]
     st.session_state.map_zoom = 11
 if 'highlight_id' not in st.session_state:
     st.session_state.highlight_id = None
@@ -48,7 +48,7 @@ except Exception as e:
     st.error(f"⚠️ Data Error: {e}"); st.stop()
 
 # =========================================================
-# 4. SIDEBAR
+# 4. SIDEBAR (NOW WITH A FORM TO STOP REFRESHING)
 # =========================================================
 st.sidebar.title("TANC Dashboard")
 
@@ -59,29 +59,39 @@ else:
     selected_locals = []
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("1. Base Map (Color)")
 
-# Base Metrics
-base_metrics = {
-    "% Hispanic": ("% Hispanic", "Reds"),
-    "% Black": ("% Black", "Oranges"),
-    "% Asian": ("% Asian", "Greens"),
-    "% White": ("% White", "Blues"),
-    "Total Population": ("Total", "Greys"),
-    "Rent Burden": ("Rent Burden", "RdPu"),
-}
-base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
-base_choice = st.sidebar.selectbox("Select Background:", base_opts)
+# --- THE FORM STARTS HERE ---
+# Everything inside this block waits for the button click
+with st.sidebar.form("map_controls"):
+    st.subheader("1. Base Map (Color)")
+    
+    base_metrics = {
+        "% Hispanic": ("% Hispanic", "Reds"),
+        "% Black": ("% Black", "Oranges"),
+        "% Asian": ("% Asian", "Greens"),
+        "% White": ("% White", "Blues"),
+        "Total Population": ("Total", "Greys"),
+        "Rent Burden": ("Rent Burden", "RdPu"),
+    }
+    base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
+    base_choice = st.selectbox("Select Background:", base_opts)
+    
+    st.markdown("---")
+    st.subheader("2. Overlay (Hatching)")
+    st.caption("Cross-hatching appears where condition is met.")
+    
+    overlay_choice = st.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
+    
+    # Defaults
+    overlay_threshold = 30
+    if overlay_choice != "None":
+        overlay_threshold = st.slider(f"Hatch when {overlay_choice} is > X%", 0, 100, 30)
+        
+    # THE MAGIC BUTTON
+    submitted = st.form_submit_button("🔄 Update Map")
+
+# Get values outside the form (so the script can use them)
 base_col, base_cmap = base_metrics[base_choice]
-
-st.sidebar.subheader("2. Overlay (Borders)")
-st.sidebar.caption("Highlights tracts that meet the condition.")
-
-# Overlay Metrics
-overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
-overlay_threshold = 0
-if overlay_choice != "None":
-    overlay_threshold = st.sidebar.slider(f"Highlight when {overlay_choice} is > X%", 0, 100, 30)
 
 # Data Filtering
 if len(selected_locals) > 0:
@@ -105,7 +115,7 @@ c3.metric("Avg Unemployment", f"{local_data['Unemployment Rate'].mean():.1f}%" i
 c4.metric("Tracts", len(local_data))
 
 # =========================================================
-# 6. BIVARIATE MAP (FULL WIDTH)
+# 6. BIVARIATE MAP (WITH HATCHING)
 # =========================================================
 st.markdown(f"### 🗺️ Map: {base_choice} + {overlay_choice}")
 
@@ -122,7 +132,7 @@ if base_col in map_data.columns:
              loc = st.session_state.map_center
              zoom = st.session_state.map_zoom
 
-        # 2. HIGHLIGHT FUNCTION (Cyan Selection)
+        # 2. HIGHLIGHT FUNCTION
         def style_fn(feature):
             base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
             if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
@@ -137,23 +147,29 @@ if base_col in map_data.columns:
             location=loc, zoom_start=zoom
         )
 
-        # 4. OVERLAY LAYER (Dashed Borders)
-        # This replaces the buggy StripePattern with a robust "Dashed Line" overlay
+        # 4. OVERLAY LAYER (HATCHING)
         if overlay_choice != "None" and overlay_choice in map_data.columns:
             overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
             
             if not overlay_data.empty:
+                # Create Pattern Object
+                # angle=45 (Diagonal), weight=2 (Thickness), space_color='transparent' (See through)
+                stripe = StripePattern(angle=45, color='#111111', weight=2, opacity=0.8, space_color='transparent')
+                stripe.add_to(m)
+                
+                # Add GeoJson with Pattern
                 folium.GeoJson(
                     overlay_data,
                     name=f"High {overlay_choice}",
                     style_function=lambda x: {
-                        'color': '#2c3e50',      # Dark Grey Border
-                        'weight': 2.5,           # Thicker than normal
-                        'dashArray': '5, 5',     # <--- THIS MAKES IT DASHED/HASHED
-                        'fillOpacity': 0,        # Transparent fill (See race underneath)
-                        'interactive': False
+                        'fillPattern': stripe, # <--- The Pattern Object
+                        'fillOpacity': 1.0,    # <--- MUST BE 1.0 TO SHOW PATTERN
+                        'color': 'black',      # Border Color
+                        'weight': 1.0,         # Border Thickness
+                        'opacity': 1.0
                     },
-                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)"
+                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
+                    interactive=False
                 ).add_to(m)
 
         st_folium(m, width="stretch", height=600)
