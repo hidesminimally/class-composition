@@ -3,7 +3,6 @@ import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
 import folium
-from folium.plugins import StripePattern
 import plotly.express as px
 import warnings
 
@@ -49,7 +48,7 @@ except Exception as e:
     st.error(f"⚠️ Data Error: {e}"); st.stop()
 
 # =========================================================
-# 4. SIDEBAR (AUTO-REFRESH ENABLED)
+# 4. SIDEBAR
 # =========================================================
 st.sidebar.title("TANC Dashboard")
 
@@ -74,13 +73,13 @@ base_opts = [k for k,v in base_metrics.items() if v[0] in df.columns]
 base_choice = st.sidebar.selectbox("Select Background:", base_opts)
 base_col, base_cmap = base_metrics[base_choice]
 
-st.sidebar.subheader("2. Overlay (Hatching)")
-st.sidebar.caption("Cross-hatching appears where condition is met.")
+st.sidebar.subheader("2. Overlay (Borders)")
+st.sidebar.caption("Draws a border around areas meeting the condition.")
 
 overlay_choice = st.sidebar.selectbox("Select Condition:", ["None", "Rent Burden", "Unemployment Rate"])
 overlay_threshold = 0
 if overlay_choice != "None":
-    overlay_threshold = st.sidebar.slider(f"Hatch when {overlay_choice} is > X%", 0, 100, 30)
+    overlay_threshold = st.sidebar.slider(f"Highlight when {overlay_choice} is > X%", 0, 100, 30)
 
 # Data Filtering
 if len(selected_locals) > 0:
@@ -104,7 +103,7 @@ c3.metric("Avg Unemployment", f"{local_data['Unemployment Rate'].mean():.1f}%" i
 c4.metric("Tracts", len(local_data))
 
 # =========================================================
-# 6. BIVARIATE MAP (WITH CROSS-HATCHING)
+# 6. BIVARIATE MAP (STABLE VERSION)
 # =========================================================
 st.markdown(f"### 🗺️ Map: {base_choice} + {overlay_choice}")
 
@@ -113,16 +112,15 @@ if base_col in map_data.columns:
     if not valid_map.empty:
         
         # 1. ZOOM LOGIC
-        # We prefer the Session State zoom if it exists, to prevent "jumping"
-        if st.session_state.is_zoomed:
-             loc = st.session_state.map_center
-             zoom = st.session_state.map_zoom
-        else:
+        if not st.session_state.is_zoomed:
              loc = [37.8044, -122.2712]
              zoom = 11
              if len(selected_locals) > 0: zoom = 12
+        else:
+             loc = st.session_state.map_center
+             zoom = st.session_state.map_zoom
 
-        # 2. HIGHLIGHT FUNCTION
+        # 2. HIGHLIGHT FUNCTION (Cyan Selection)
         def style_fn(feature):
             base = {"fillOpacity": 0.7, "weight": 0.3, "color": "#444444"}
             if st.session_state.highlight_id and feature['properties']['Match_ID'] == st.session_state.highlight_id:
@@ -137,32 +135,26 @@ if base_col in map_data.columns:
             location=loc, zoom_start=zoom
         )
 
-        # 4. OVERLAY LAYER (CROSS HATCHING)
+        # 4. OVERLAY LAYER (THICK DASHED BORDER)
+        # We removed StripePattern because it causes crashes.
+        # This uses pure vector lines which are 100% stable.
         if overlay_choice != "None" and overlay_choice in map_data.columns:
             overlay_data = valid_map[valid_map[overlay_choice] > overlay_threshold]
             
             if not overlay_data.empty:
-                # Create Pattern Object (Diagonal Stripes)
-                # weight=2 makes lines visible. color='black' makes them dark.
-                stripe = StripePattern(angle=45, color='#111111', weight=2, opacity=0.7, space_color='transparent')
-                stripe.add_to(m)
-                
-                # Add GeoJson with Pattern
                 folium.GeoJson(
                     overlay_data,
                     name=f"High {overlay_choice}",
                     style_function=lambda x: {
-                        'fillPattern': stripe, # <--- The Cross Hatching
-                        'fillOpacity': 1.0,    # Must be 1.0 for pattern to show
-                        'color': 'black',      # Border
-                        'weight': 1.0, 
-                        'opacity': 1.0
+                        'color': '#222222',      # Dark Grey/Black Border
+                        'weight': 3,             # Thick Border
+                        'dashArray': '5, 5',     # Dashed Line
+                        'fillOpacity': 0,        # Transparent (See color underneath)
+                        'interactive': False     # Click goes through to base layer
                     },
-                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)",
-                    interactive=False # Let clicks fall through to base layer
+                    tooltip=f"⚠️ High {overlay_choice} (> {overlay_threshold}%)"
                 ).add_to(m)
 
-        # FIXED: Removed 'width="stretch"' to ensure rendering
         st_folium(m, use_container_width=True, height=600)
     else:
         st.warning("No data.")
