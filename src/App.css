@@ -127,3 +127,53 @@ table.data-grid tr.selected-row td:first-child { border-left: 4px solid #2563eb;
 .checkbox-item { display: flex; align-items: center; font-size: 0.9rem; cursor: pointer; color: #475569; }
 .checkbox-item:hover { color: #0f172a; }
 .checkbox-item input { margin-right: 8px; accent-color: #2563eb; }
+
+/* --- FACT SHEET OVERLAY --- */
+.fact-sheet-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(15, 23, 42, 0.7); /* Dark backdrop */
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+  backdrop-filter: blur(4px);
+}
+
+.paper-document {
+  width: 800px; max-width: 95%; height: 90vh;
+  background: white;
+  padding: 40px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  overflow-y: auto;
+  position: relative;
+  font-family: 'Georgia', serif; /* Professional doc feel */
+  color: #1e293b;
+}
+
+.close-btn {
+  position: absolute; top: 20px; right: 20px;
+  background: #f1f5f9; border: none; padding: 8px 16px;
+  cursor: pointer; font-weight: bold; border-radius: 4px;
+  font-family: sans-serif;
+}
+.close-btn:hover { background: #e2e8f0; color: #dc2626; }
+
+/* Fact Sheet Typography */
+.fs-header { border-bottom: 4px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: end; }
+.fs-title { font-size: 2.5rem; font-weight: 900; margin: 0; line-height: 1; }
+.fs-subtitle { font-size: 1.2rem; color: #64748b; margin: 5px 0 0 0; font-family: sans-serif; }
+
+.fs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+.fs-section-title { font-family: sans-serif; font-size: 0.9rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 16px; color: #64748b; }
+
+.fs-big-stat { font-size: 3rem; font-weight: 800; color: #0f172a; line-height: 1; margin-bottom: 5px; }
+.fs-stat-label { font-family: sans-serif; font-size: 0.9rem; color: #64748b; font-weight: 600; }
+
+.fs-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 8px 0; font-family: sans-serif; }
+
+/* PRINT ONLY STYLES */
+@media print {
+  body * { visibility: hidden; } /* Hide everything */
+  .fact-sheet-overlay, .paper-document * { visibility: visible; } /* Show doc */
+  .fact-sheet-overlay { position: absolute; left: 0; top: 0; background: white; width: 100%; height: auto; display: block; }
+  .paper-document { box-shadow: none; width: 100%; max-width: 100%; height: auto; overflow: visible; padding: 0; margin: 0; }
+  .close-btn { display: none; }
+}
