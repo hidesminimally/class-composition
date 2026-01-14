@@ -1,0 +1,78 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.sidebar {
+  width: 320px;
+  padding: 20px;
+  background: white;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+  z-index: 2;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.map-wrapper {
+  flex-grow: 1;
+  position: relative;
+}
+
+.logo { margin-top: 0; color: #333; }
+
+.control-group { margin-bottom: 20px; }
+.control-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; color: #666; }
+.control-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+
+.info-box {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.small-text { font-size: 0.85em; color: #666; }
+hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+/* Add to bottom of App.css */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+}
+
+.target-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.target-item {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.target-item:hover {
+  background-color: #f0f8ff;
+}
