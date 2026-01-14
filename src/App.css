@@ -1,78 +1,119 @@
+/* App.css */
 html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
   width: 100%;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #333;
 }
 
 .app-container {
-  display: flex;
+  display: grid;
+  grid-template-rows: 60vh 1fr; /* Map takes 60%, Table takes 40% */
   height: 100vh;
   width: 100vw;
 }
 
+/* --- TOP SECTION --- */
+.top-section {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  overflow: hidden;
+  border-bottom: 2px solid #ddd;
+}
+
 .sidebar {
-  width: 320px;
-  padding: 20px;
   background: white;
-  border-right: 1px solid #ddd;
+  padding: 20px;
   overflow-y: auto;
-  z-index: 2;
-  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  border-right: 1px solid #ddd;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+  z-index: 10;
 }
 
 .map-wrapper {
-  flex-grow: 1;
   position: relative;
+  width: 100%;
+  height: 100%;
+  background: #e0e0e0;
 }
 
-.logo { margin-top: 0; color: #333; }
-
-.control-group { margin-bottom: 20px; }
-.control-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; color: #666; }
-.control-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
-
-.info-box {
-  background: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
+/* --- BOTTOM SECTION (Table) --- */
+.bottom-section {
+  background-color: #f4f4f9;
+  padding: 20px 30px;
+  overflow-y: auto;
 }
 
-.stat-row {
+.data-header {
+  margin-bottom: 15px;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.small-text { font-size: 0.85em; color: #666; }
-hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
-/* Add to bottom of App.css */
-.checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.checkbox-row {
-  display: flex;
   align-items: center;
 }
 
-.target-list {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #eee;
-  border-radius: 4px;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Wider cards */
+  gap: 15px;
+  padding-bottom: 40px;
 }
 
-.target-item {
-  padding: 8px;
-  border-bottom: 1px solid #eee;
+.card {
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
   cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  display: flex;
+  flex-direction: column;
 }
 
-.target-item:hover {
-  background-color: #f0f8ff;
+.card:hover {
+  transform: translateY(-2px);
+  border-color: #999;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.card-stat-main {
+  font-size: 1.6em;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.demo-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85em;
+  margin-bottom: 3px;
+  color: #555;
+}
+
+.bar-bg {
+  width: 60px;
+  background: #eee;
+  height: 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  align-self: center;
+}
+.bar-fill { height: 100%; border-radius: 3px; }
+
+/* UTILS */
+.control-group { margin-bottom: 15px; }
+.control-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px; }
+.control-group select { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc; }
+.checkbox-list { height: 120px; overflow-y: auto; border: 1px solid #eee; padding: 5px; background: #fafafa; }
+.checkbox-row { display: flex; align-items: center; font-size: 0.9rem; margin-bottom: 4px; }
+.info-panel { margin-top: 20px; padding: 15px; background: #eef; border-left: 4px solid #44f; border-radius: 4px; }

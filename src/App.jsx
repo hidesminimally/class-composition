@@ -3,16 +3,31 @@ import Map, { Source, Layer, Popup } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './App.css';
 
+// 1. Hatch Pattern Generator for Overlay
+function generateHatchPattern() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 8, 8);
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, 8);
+  ctx.lineTo(8, 0);
+  ctx.stroke();
+  return ctx.getImageData(0, 0, 8, 8);
+}
+
 function App() {
   const mapRef = useRef();
-  const [metric, setMetric] = useState('rent_burden');
   
-  // DATA STATE
+  // STATE
+  const [baseMetric, setBaseMetric] = useState('rent_burden');
+  const [overlayMetric, setOverlayMetric] = useState('none');
   const [mapData, setMapData] = useState([]);
   const [allLocals, setAllLocals] = useState([]);
   const [selectedLocals, setSelectedLocals] = useState([]); 
-  
-  // SELECTION STATE
   const [hoverInfo, setHoverInfo] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
 
@@ -20,195 +35,221 @@ function App() {
     rent_burden: { label: "Rent Burden", color: "#ef3b2c", max: 60 },
     unemployment: { label: "Unemployment", color: "#2171b5", max: 15 },
     pct_hispanic: { label: "% Hispanic", color: "#74c476", max: 80 },
-    pct_black: { label: "% Black", color: "#fd8d3c", max: 80 }
+    pct_black: { label: "% Black", color: "#fd8d3c", max: 80 },
+    pct_asian: { label: "% Asian", color: "#8c6bb1", max: 80 },
+    pct_white: { label: "% White", color: "#999999", max: 80 }
   };
 
-  // --- 1. FETCH & INITIALIZE ---
+  // 2. FETCH DATA
   useEffect(() => {
     fetch('/data.geojson')
-      .then(resp => resp.json())
+      .then(r => r.json())
       .then(json => {
-        const features = json.features;
-        setMapData(features);
-
-        // AUTO-DETECT LOCALS
-        const uniqueLocals = [...new Set(features.map(f => f.properties.tanc_local))].filter(Boolean).sort();
-        setAllLocals(uniqueLocals);
-        setSelectedLocals(uniqueLocals); 
+        setMapData(json.features);
+        // Identify all unique locals in the dataset
+        const locals = [...new Set(json.features.map(f => f.properties.tanc_local))].filter(Boolean).sort();
+        setAllLocals(locals);
+        setSelectedLocals(locals); // Select all by default
       })
-      .catch(err => console.error("Could not load map data:", err));
+      .catch(e => console.error(e));
   }, []);
 
-  // --- 2. MAP STYLES ---
-  const layerStyle = useMemo(() => {
-    const maxVal = metrics[metric].max;
-    const activeColor = metrics[metric].color;
+  const onMapLoad = (e) => {
+    if (!e.target.hasImage('hatch')) {
+      e.target.addImage('hatch', generateHatchPattern());
+    }
+  };
+
+  // 3. MAP STYLES
+  const baseStyle = useMemo(() => {
+    const { max, color } = metrics[baseMetric];
     
     return {
-      id: 'census-data',
+      id: 'base-layer',
       type: 'fill',
       paint: {
         'fill-color': [
           'case',
-          // CONDITION: Is the tract's local in our selected list?
+          // CASE 1: Area is in a SELECTED Local -> Use Color Gradient
           ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
+          ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', max, color],
           
-          // TRUE (Selected): Use Colorful Gradient
-          ['interpolate', ['linear'], ['get', metric], 0, '#f7f7f7', maxVal, activeColor],
-          
-          // FALSE (Unselected): Use Greyscale Gradient
-          ['interpolate', ['linear'], ['get', metric], 0, '#f7f7f7', maxVal, '#888888']
+          // CASE 2: Area is NOT selected -> Use Greyscale Gradient (Context)
+          ['interpolate', ['linear'], ['get', baseMetric], 0, '#ffffff', max, '#555555']
         ],
-        'fill-opacity': 0.8,
-        'fill-outline-color': '#999'
+        'fill-opacity': 0.85,
+        'fill-outline-color': 'rgba(0,0,0,0.2)'
       }
     };
-  }, [metric, selectedLocals]);
+  }, [baseMetric, selectedLocals]);
+
+  const overlayStyle = useMemo(() => {
+    if (overlayMetric === 'none') return null;
+    return {
+      id: 'overlay-layer',
+      type: 'fill',
+      paint: { 'fill-pattern': 'hatch', 'fill-opacity': 0.5 },
+      filter: ['>', ['get', overlayMetric], metrics[overlayMetric].max * 0.3]
+    };
+  }, [overlayMetric]);
 
   const highlightStyle = {
-    id: 'highlight-layer',
+    id: 'highlight',
     type: 'line',
     paint: { 'line-color': '#00FFFF', 'line-width': 3 }
   };
-
+  
   const highlightFilter = useMemo(() => 
-    selectedFeature ? ['==', ['get', 'id'], selectedFeature.properties.id] : ['==', 'id', '']
+    selectedFeature ? ['==', 'id', selectedFeature.properties.id] : ['==', 'id', '']
   , [selectedFeature]);
 
-  // --- 3. HIGH PRIORITY LOGIC ---
-  const highPriority = useMemo(() => {
-    if (!mapData.length) return [];
+  // 4. SORTED DATA FOR TABLE
+  const sortedData = useMemo(() => {
+    if(!mapData.length) return [];
     return mapData
       .map(f => f.properties)
-      .filter(p => selectedLocals.includes(p.tanc_local)) 
-      .filter(p => p.rent_burden > 35 && p.total_pop > 500)
-      .sort((a, b) => b.rent_burden - a.rent_burden)
-      .slice(0, 10);
-  }, [mapData, selectedLocals]);
+      .filter(p => selectedLocals.includes(p.tanc_local))
+      .sort((a,b) => (b[baseMetric]||0) - (a[baseMetric]||0));
+  }, [mapData, selectedLocals, baseMetric]);
 
-  // --- HANDLERS ---
-  const onMapClick = (event) => {
-    const feature = event.features && event.features[0];
-    
-    // Logic: If clicking the SAME feature, deselect it. Otherwise select new.
-    if (feature && selectedFeature && feature.properties.id === selectedFeature.properties.id) {
-        setSelectedFeature(null);
-    } else {
-        setSelectedFeature(feature || null);
+  const onCardClick = (p) => {
+    const feature = mapData.find(f => f.properties.id === p.id);
+    if(feature) {
+      setSelectedFeature(feature);
+      mapRef.current?.flyTo({ center: feature.geometry.coordinates[0][0], zoom: 13.5 });
     }
-  };
-
-  const onListClick = (properties) => {
-      const feature = mapData.find(f => f.properties.id === properties.id);
-      if (feature) setSelectedFeature(feature);
-  };
-
-  const toggleLocal = (local) => {
-    setSelectedLocals(prev => 
-      prev.includes(local) ? prev.filter(l => l !== local) : [...prev, local]
-    );
   };
 
   const activeInfo = selectedFeature || hoverInfo?.feature;
 
   return (
     <div className="app-container">
-      <div className="sidebar">
-        <h2 className="logo">✊ TANC Map</h2>
-        
-        <div className="control-group">
-          <label>Data Layer</label>
-          <select value={metric} onChange={e => setMetric(e.target.value)}>
-            <option value="rent_burden">Rent Burden</option>
-            <option value="unemployment">Unemployment Rate</option>
-            <option value="pct_hispanic">% Hispanic</option>
-            <option value="pct_black">% Black</option>
-          </select>
-        </div>
-
-        <div className="control-group">
-          <label>Focus Local</label>
-          <p className="small-text" style={{marginBottom:'10px'}}>Uncheck to see context (Greyscale).</p>
-          <div className="checkbox-group">
-            {allLocals.length === 0 && <p className="small-text">Loading...</p>}
-            {allLocals.map(local => (
-              <div key={local} className="checkbox-row">
-                <input 
-                  type="checkbox" id={local} 
-                  checked={selectedLocals.includes(local)} 
-                  onChange={() => toggleLocal(local)}
-                />
-                <label htmlFor={local} style={{marginLeft:'8px', cursor:'pointer'}}>{local}</label>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <hr />
-        
-        {/* INFO BOX */}
-        <div className={`info-box ${selectedFeature ? 'locked' : ''}`}>
-          {activeInfo ? (
-            <>
-              <div style={{display:'flex', justifyContent:'space-between'}}>
-                <h3>Tract {activeInfo.properties.id}</h3>
-                {selectedFeature && <button onClick={() => setSelectedFeature(null)} style={{fontSize:'0.8em'}}>✕ Clear</button>}
-              </div>
-              <div className="stat-row">
-                <span>{metrics[metric].label}:</span>
-                <strong>{activeInfo.properties[metric]}%</strong>
-              </div>
-              <div className="stat-row"><span>Local:</span><span>{activeInfo.properties.tanc_local}</span></div>
-              <div className="stat-row"><span>Population:</span><span>{activeInfo.properties.total_pop}</span></div>
-            </>
-          ) : (
-            <p><i>Hover to preview, Click to lock.</i></p>
-          )}
-        </div>
-
-        <hr />
-        <h3>🔥 High Priority</h3>
-        <p className="small-text">Showing targets in <b>selected</b> locals.</p>
-        <div className="target-list">
-            {highPriority.length === 0 && <p className="small-text">No targets found.</p>}
-            {highPriority.map(p => (
-                <div key={p.id} className="target-item" onClick={() => onListClick(p)}>
-                    <strong>{p.rent_burden}% Burden</strong>
-                    <br/><span className="small-text">{p.tanc_local} ({p.id})</span>
-                </div>
-            ))}
-        </div>
-      </div>
-
-      <div className="map-wrapper">
-        <Map
-          ref={mapRef}
-          initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }}
-          mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
-          onMouseMove={evt => setHoverInfo(evt.features && evt.features[0] ? { feature: evt.features[0], x: evt.point.x, y: evt.point.y } : null)}
-          onClick={onMapClick}
-          interactiveLayerIds={['census-data']}
-        >
-          <Source type="geojson" data="/data.geojson">
-            <Layer {...layerStyle} />
-            <Layer {...highlightStyle} filter={highlightFilter} />
-          </Source>
+      
+      {/* TOP SECTION */}
+      <div className="top-section">
+        <div className="sidebar">
+          <h2 style={{marginTop:0}}>✊ TANC Map</h2>
           
-          {/* FIX: Removed !selectedFeature check. 
-            Now the tooltip appears even if something is selected. 
-          */}
-          {hoverInfo && (
-            <Popup
-              longitude={hoverInfo.feature.geometry.coordinates[0][0][0]}
-              latitude={hoverInfo.feature.geometry.coordinates[0][0][1]}
-              closeButton={false}
-              anchor="bottom"
-            >
-              <div style={{color: 'black', padding: '5px'}}><b>{hoverInfo.feature.properties[metric]}%</b></div>
-            </Popup>
+          <div className="control-group">
+            <label>Color Layer (Base)</label>
+            <select value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>
+              {Object.entries(metrics).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+
+          <div className="control-group">
+            <label>Overlay (Hatch)</label>
+            <select value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}>
+              <option value="none">-- None --</option>
+              {Object.entries(metrics).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+
+          <div className="control-group">
+            <label>Filter Locals (Uncheck for Greyscale)</label>
+            <div className="checkbox-list">
+              {allLocals.map(l => (
+                <div key={l} className="checkbox-row">
+                  <input type="checkbox" checked={selectedLocals.includes(l)} 
+                    onChange={() => setSelectedLocals(p => p.includes(l) ? p.filter(x=>x!==l) : [...p,l])}
+                  />
+                  <span style={{marginLeft:8}}>{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {activeInfo && (
+            <div className="info-panel">
+              <h3>Tract {activeInfo.properties.id}</h3>
+              <p><b>{metrics[baseMetric].label}:</b> {activeInfo.properties[baseMetric]}%</p>
+              <p><b>Population:</b> {activeInfo.properties.total_pop}</p>
+              <small>{activeInfo.properties.tanc_local} Local</small>
+            </div>
           )}
-        </Map>
+        </div>
+
+        <div className="map-wrapper">
+          <Map
+            ref={mapRef}
+            initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }}
+            mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+            style={{ width: '100%', height: '100%' }}
+            onLoad={onMapLoad}
+            onMouseMove={e => setHoverInfo(e.features && e.features[0] ? {feature:e.features[0], x:e.point.x, y:e.point.y} : null)}
+            onClick={e => setSelectedFeature(e.features && e.features[0] || null)}
+            interactiveLayerIds={['base-layer', 'overlay-layer']}
+          >
+            <Source type="geojson" data="/data.geojson">
+              <Layer {...baseStyle} />
+              {overlayStyle && <Layer {...overlayStyle} />}
+              <Layer {...highlightStyle} filter={highlightFilter} />
+            </Source>
+            
+            {hoverInfo && (
+              <Popup longitude={hoverInfo.feature.geometry.coordinates[0][0][0]} 
+                     latitude={hoverInfo.feature.geometry.coordinates[0][0][1]} 
+                     closeButton={false}>
+                <div style={{color:'black', padding:'5px'}}>
+                  {hoverInfo.feature.properties[baseMetric]}%
+                </div>
+              </Popup>
+            )}
+          </Map>
+        </div>
       </div>
+
+      {/* BOTTOM SECTION: EXPANDED TABLE */}
+      <div className="bottom-section">
+        <div className="data-header">
+          <h3>Ranked Tracts by {metrics[baseMetric].label}</h3>
+          <span style={{fontSize:'0.9em', color:'#666'}}>{sortedData.length} tracts shown</span>
+        </div>
+        
+        <div className="grid">
+          {sortedData.slice(0, 100).map(p => (
+            <div key={p.id} className="card" onClick={() => onCardClick(p)}>
+              
+              <div className="card-header">
+                <div>
+                  <div style={{fontWeight:'bold'}}>{p.tanc_local}</div>
+                  <div style={{fontSize:'0.75em', color:'#888'}}>Tract #{p.id}</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                   <div style={{fontSize:'0.8em', color:'#666'}}>Pop: {p.total_pop}</div>
+                </div>
+              </div>
+
+              {/* Main Metric */}
+              <div className="card-stat-main" style={{color: metrics[baseMetric].color}}>
+                {p[baseMetric]}% <span style={{fontSize:'0.5em', color:'#333', fontWeight:'normal'}}>{metrics[baseMetric].label}</span>
+              </div>
+              
+              {/* Demographic Breakdown Table */}
+              <div style={{marginTop:'auto', paddingTop:'10px', borderTop:'1px dashed #eee'}}>
+                <div style={{fontSize:'0.75em', fontWeight:'bold', marginBottom:'5px', color:'#999'}}>DEMOGRAPHICS</div>
+                
+                {[
+                  { l: 'Black', k: 'pct_black', c: '#fd8d3c' },
+                  { l: 'Hispanic', k: 'pct_hispanic', c: '#74c476' },
+                  { l: 'Asian', k: 'pct_asian', c: '#8c6bb1' },
+                  { l: 'White', k: 'pct_white', c: '#999' }
+                ].map((d) => (
+                  <div key={d.l} className="demo-row">
+                    <span style={{width:'60px'}}>{d.l}</span>
+                    <span style={{fontWeight:'bold'}}>{p[d.k]}%</span>
+                    <div className="bar-bg">
+                       <div className="bar-fill" style={{width: `${Math.min(p[d.k], 100)}%`, background: d.c}}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
