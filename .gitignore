@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+# .gitignore
+
+# Ignore the config file with secrets
+scripts/config.py
+
+# Ignore Python cache and data files
+__pycache__/
+*.csv
+*.geojson
