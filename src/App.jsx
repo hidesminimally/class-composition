@@ -18,7 +18,7 @@ const HIGHLIGHT_STYLE = {
   paint: { 'line-color': '#00FFFF', 'line-width': 4 }
 };
 
-// --- HELPERS ---
+// --- UTILITIES ---
 function generateDotPattern(density) {
   const size = 12; const ctx = document.createElement('canvas').getContext('2d');
   ctx.canvas.width = size; ctx.canvas.height = size;
@@ -31,89 +31,116 @@ function generateDotPattern(density) {
   return ctx.getImageData(0, 0, size, size);
 }
 
-const DemoBar = ({ p, height = 8 }) => (
-  <div style={{ display: 'flex', height: height, width: '100%', borderRadius: 3, overflow: 'hidden', background: '#e2e8f0' }}>
-    <div style={{ width: `${p.pct_black}%`, background: '#ea580c' }} title="Black" />
-    <div style={{ width: `${p.pct_hispanic}%`, background: '#16a34a' }} title="Hispanic" />
-    <div style={{ width: `${p.pct_asian}%`, background: '#9333ea' }} title="Asian" />
-    <div style={{ flex: 1, background: '#cbd5e1' }} title="White/Other" />
-  </div>
-);
-
-// --- COMPONENTS ---
-const Card = ({ p, metric, isPinned, onClick, onFactSheet }) => (
-  <div className={`stat-card ${isPinned ? 'pinned' : 'interactive'}`} onClick={onClick}>
-    <div className="card-top">
-      <div>
-        <div className="card-title">{p.tanc_local}</div>
-        <div className="card-subtitle">Tract {p.id}</div>
-      </div>
-      <div className="card-metric-main" style={{color: METRICS[metric].color}}>
-        {p[metric]}%
-      </div>
-    </div>
-    <div className="card-grid">
-      <div className="stat-item"><span className="stat-lbl">Pop</span><span className="stat-val">{p.total_pop}</span></div>
-      <div className="stat-item"><span className="stat-lbl">Unemp</span><span className="stat-val">{p.unemployment}%</span></div>
-      <div className="stat-item"><span className="stat-lbl">Burden</span><span className="stat-value">{p.rent_burden}%</span></div>
-    </div>
-    <div className="bar-viz">
-      <div style={{width:`${p.pct_black}%`, background:'#ea580c'}} title="Black"/>
-      <div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}} title="Hispanic"/>
-      <div style={{width:`${p.pct_asian}%`, background:'#9333ea'}} title="Asian"/>
-      <div style={{flex:1, background:'#e5e7eb'}}/>
-    </div>
-    {isPinned && (
-      <button onClick={(e) => { e.stopPropagation(); onFactSheet(); }} className="fs-btn">
-        Open Full Fact Sheet
-      </button>
-    )}
-  </div>
-);
-
-const FactSheet = ({ feature, onClose }) => {
-  if (!feature) return null;
-  const p = feature.properties;
+// --- CORE COMPONENT: THE PAPER FACT SHEET (Reusable) ---
+const FactSheetContent = ({ p }) => {
+  const isAgg = p.id === 'AGGREGATE';
   return (
-    <div className="overlay-backdrop" onClick={onClose}>
-      <div className="sheet-paper" onClick={e => e.stopPropagation()}>
-        <div style={{display:'flex', justifyContent:'space-between', marginBottom:30, borderBottom:'4px solid #0f172a', paddingBottom:20}}>
-          <div>
-            <h1 style={{margin:0, fontSize:'2rem', lineHeight:1}}>Tract {p.id}</h1>
-            <div style={{color:'#64748b', marginTop:5, fontFamily:'sans-serif'}}>{p.tanc_local} Local Chapter</div>
-          </div>
-          <button onClick={onClose} style={{height:40, background:'#f1f5f9', border:'none', padding:'0 20px', borderRadius:4, cursor:'pointer', fontWeight:'bold', fontSize:'0.9rem'}}>Close</button>
+    <div style={{height:'100%', display:'flex', flexDirection:'column'}}>
+      <div style={{borderBottom:'4px solid #0f172a', paddingBottom:20, marginBottom:30}}>
+        <h1 style={{fontSize:'2.5rem', fontWeight:800, margin:0, lineHeight:1}}>
+          {isAgg ? `${p.tanc_local} Local` : `Tract ${p.id}`}
+        </h1>
+        <div style={{color:'#64748b', marginTop:5, fontSize:'1.1rem'}}>
+          {isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter`}
         </div>
-        
-        <div className="fs-grid">
-          <div>
-            <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', textTransform:'uppercase', fontSize:'0.8rem', fontFamily:'sans-serif', fontWeight:800}}>Risk Profile</h3>
-            <div style={{display:'flex', gap:30, marginBottom:20, marginTop:15}}>
-              <div><div className="fs-big-stat" style={{color:'#ef3b2c'}}>{p.rent_burden}%</div><div style={{fontFamily:'sans-serif', fontSize:'0.9rem', color:'#64748b'}}>Rent Burden</div></div>
-              <div><div className="fs-big-stat" style={{color:'#2563eb'}}>{p.unemployment}%</div><div style={{fontFamily:'sans-serif', fontSize:'0.9rem', color:'#64748b'}}>Unemployment</div></div>
+      </div>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:40}}>
+        {/* LEFT COL */}
+        <div>
+          <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', fontSize:'0.85rem', fontWeight:800, letterSpacing:'0.05em'}}>RISK METRICS</h3>
+          <div style={{display:'flex', gap:30, marginTop:20, marginBottom:20}}>
+            <div>
+              <div style={{fontSize:'3.5rem', fontWeight:800, color:'#ef3b2c', lineHeight:1}}>{p.rent_burden}%</div>
+              <div style={{color:'#64748b', fontWeight:600, fontSize:'0.9rem', marginTop:5}}>Rent Burden</div>
             </div>
-            <p style={{lineHeight:1.6}}>
-              Total population: <strong>{p.total_pop}</strong>. 
-              {p.rent_burden > 40 ? " This tract is severely rent-burdened." : " Rent burden is moderate."}
-            </p>
-          </div>
-          
-          <div>
-            <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', textTransform:'uppercase', fontSize:'0.8rem', fontFamily:'sans-serif', fontWeight:800}}>Demographics</h3>
-            <div style={{marginTop:15, marginBottom:15}}>
-              <div style={{display:'flex', height:20, borderRadius:4, overflow:'hidden'}}>
-                <div style={{width:`${p.pct_black}%`, background:'#ea580c'}}/>
-                <div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}}/>
-                <div style={{width:`${p.pct_asian}%`, background:'#9333ea'}}/>
-                <div style={{flex:1, background:'#e5e7eb'}}/>
-              </div>
+            <div>
+              <div style={{fontSize:'3.5rem', fontWeight:800, color:'#2563eb', lineHeight:1}}>{p.unemployment}%</div>
+              <div style={{color:'#64748b', fontWeight:600, fontSize:'0.9rem', marginTop:5}}>Unemployment</div>
             </div>
-            <div className="fs-row"><span>Black</span><strong>{p.pct_black}%</strong></div>
-            <div className="fs-row"><span>Hispanic</span><strong>{p.pct_hispanic}%</strong></div>
-            <div className="fs-row"><span>Asian</span><strong>{p.pct_asian}%</strong></div>
-            <div className="fs-row"><span>White</span><strong>{p.pct_white}%</strong></div>
           </div>
+          <p style={{lineHeight:1.6, fontSize:'1rem', color:'#334155'}}>
+            Total Population: <strong>{p.total_pop?.toLocaleString()}</strong>.<br/>
+            {isAgg 
+              ? "Data represents a weighted average across all census tracts within this Local's jurisdiction." 
+              : (p.rent_burden > 40 ? "This tract shows severe housing distress signs." : "This tract shows moderate housing stability.")}
+          </p>
         </div>
+
+        {/* RIGHT COL */}
+        <div>
+          <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', fontSize:'0.85rem', fontWeight:800, letterSpacing:'0.05em'}}>DEMOGRAPHICS</h3>
+          <div style={{marginTop:20, marginBottom:20}}>
+            <div style={{display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid #e2e8f0'}}>
+              <div style={{width:`${p.pct_black}%`, background:'#ea580c'}} />
+              <div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}} />
+              <div style={{width:`${p.pct_asian}%`, background:'#9333ea'}} />
+              <div style={{flex:1, background:'#f1f5f9'}} />
+            </div>
+          </div>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Black / African American</span><strong>{p.pct_black}%</strong></div>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Hispanic / Latinx</span><strong>{p.pct_hispanic}%</strong></div>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Asian</span><strong>{p.pct_asian}%</strong></div>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>White / Other</span><strong>{p.pct_white}%</strong></div>
+        </div>
+      </div>
+
+      <div style={{marginTop:'auto', paddingTop:30, borderTop:'1px dashed #cbd5e1', textAlign:'center', color:'#94a3b8', fontSize:'0.8rem'}}>
+        TANC Internal Document • Generated {new Date().toLocaleDateString()}
+      </div>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: CONSOLIDATED REPORT ---
+const ConsolidatedReport = ({ locals, onClose, dataFunc }) => {
+  // Generate data for ALL requested locals
+  const reports = locals.map(local => dataFunc(local)).filter(Boolean);
+
+  return (
+    <div className="report-modal">
+      <div className="report-controls">
+        <button className="btn-primary" onClick={() => window.print()}>Print / Save PDF</button>
+        <button className="btn-secondary" onClick={onClose}>Close</button>
+      </div>
+      <div className="report-container">
+        {reports.map((stats, i) => (
+          <div key={i} className="report-page">
+            <FactSheetContent p={stats} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// --- EXISTING COMPONENTS (Card, etc) ---
+const Card = ({ p, metric, isPinned, onClick, onFactSheet }) => {
+  if (isPinned) {
+    return (
+      <div className="stat-card pinned">
+        <div className="pinned-left">
+          <h3>{p.tanc_local}</h3><span>Tract {p.id}</span>
+        </div>
+        <div className="pinned-right">
+          <div className="pinned-metric" style={{color: METRICS[metric].color}}>{p[metric]}%</div>
+          <button className="pinned-btn" onClick={(e) => { e.stopPropagation(); onFactSheet(); }}>Sheet</button>
+          <button onClick={onClick} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#94a3b8'}}>×</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="stat-card" onClick={onClick}>
+      <div className="card-top">
+        <div><div className="card-title">{p.tanc_local}</div><div className="card-sub">Tract {p.id}</div></div>
+        <div className="card-val" style={{color: METRICS[metric].color}}>{p[metric]}%</div>
+      </div>
+      <div className="card-grid">
+        <div><b>{p.total_pop}</b> Pop</div><div><b>{p.unemployment}%</b> Unemp</div><div><b>{p.rent_burden}%</b> Burden</div>
+      </div>
+      <div className="mini-bar">
+        <div style={{width:`${p.pct_black}%`, background:'#ea580c'}} /><div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}} /><div style={{width:`${p.pct_asian}%`, background:'#9333ea'}} /><div style={{flex:1, background:'#e2e8f0'}} />
       </div>
     </div>
   );
@@ -127,50 +154,73 @@ function App() {
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('controls');
+  
+  // MODAL STATES
   const [showFactSheet, setShowFactSheet] = useState(false);
+  const [showConsolidated, setShowConsolidated] = useState(false); // NEW STATE
   
   const [sortKey, setSortKey] = useState('rent_burden');
   const [sortAsc, setSortAsc] = useState(false);
-  
   const [mapData, setMapData] = useState([]);
   const [allLocals, setAllLocals] = useState([]);
   const [selectedLocals, setSelectedLocals] = useState([]);
-  const [hoverInfo, setHoverInfo] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
+  const [hoverInfo, setHoverInfo] = useState(null);
 
   useEffect(() => {
     fetch('/data.geojson').then(r => r.json()).then(json => {
-        setMapData(json.features);
-        const uniqueLocals = [...new Set(json.features.map(f => f.properties.tanc_local))].filter(Boolean).sort();
-        setAllLocals(uniqueLocals);
-        setSelectedLocals(uniqueLocals);
-      }).catch(e => console.error(e));
+      setMapData(json.features);
+      const uniqueLocals = [...new Set(json.features.map(f => f.properties.tanc_local))].filter(Boolean).sort();
+      setAllLocals(uniqueLocals); setSelectedLocals(uniqueLocals);
+    }).catch(console.error);
   }, []);
 
   const onMapLoad = (e) => {
     [1, 2, 3, 4].forEach(level => { if (!e.target.hasImage(`dots-${level}`)) e.target.addImage(`dots-${level}`, generateDotPattern(level)); });
   };
 
+  // AGGREGATION LOGIC (Reused for Consolidated Report)
+  const calculateAggregate = (localName) => {
+    const tracts = mapData.filter(f => f.properties.tanc_local === localName).map(f => f.properties);
+    if (!tracts.length) return null;
+    const totalPop = tracts.reduce((sum, t) => sum + (t.total_pop || 0), 0);
+    const wAvg = (key) => {
+      const sum = tracts.reduce((acc, t) => acc + (t[key] || 0) * (t.total_pop || 0), 0);
+      return totalPop ? Math.round((sum / totalPop) * 10) / 10 : 0;
+    };
+    return {
+      tanc_local: localName, id: "AGGREGATE", tract_count: tracts.length, total_pop: totalPop,
+      rent_burden: wAvg('rent_burden'), unemployment: wAvg('unemployment'),
+      pct_black: wAvg('pct_black'), pct_hispanic: wAvg('pct_hispanic'), pct_asian: wAvg('pct_asian'), pct_white: wAvg('pct_white')
+    };
+  };
+
+  const onLocalClick = (localName) => {
+    const aggStats = calculateAggregate(localName);
+    if (aggStats) {
+      setSelectedFeature({ properties: aggStats, geometry: null });
+      setShowFactSheet(true);
+    }
+  };
+
   const sortedData = useMemo(() => {
     if (!mapData.length) return [];
     return mapData.map(f => f.properties).filter(p => selectedLocals.includes(p.tanc_local))
-      .sort((a, b) => {
-        const valA = a[sortKey] || 0; const valB = b[sortKey] || 0;
-        return sortAsc ? valA - valB : valB - valA;
-      });
+      .sort((a, b) => (sortAsc ? (a[sortKey] - b[sortKey]) : (b[sortKey] - a[sortKey])));
   }, [mapData, selectedLocals, sortKey, sortAsc]);
 
-  const handleSort = (key) => {
-    if (sortKey === key) setSortAsc(!sortAsc);
-    else { setSortKey(key); setSortAsc(false); }
+  const handleSort = (key) => { if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(false); } };
+
+  const onSelect = (f) => {
+    setSelectedFeature(f);
+    if (f && f.geometry) {
+      mapRef.current?.flyTo({ center: f.geometry.coordinates[0][0], zoom: 13.5 });
+      if (window.innerWidth <= 768) setActiveTab('targets');
+    }
   };
 
   const baseLayerStyle = useMemo(() => ({
-    id: 'census-base', type: 'fill',
-    paint: {
-      'fill-color': ['case', ['in', ['get', 'tanc_local'], ['literal', selectedLocals]], ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color], ['interpolate', ['linear'], ['get', baseMetric], 0, '#ffffff', METRICS[baseMetric].max, '#555555']],
-      'fill-opacity': 0.6, 'fill-outline-color': 'rgba(0,0,0,0.1)'
-    }
+    id: 'census-base', type: 'fill', paint: { 'fill-color': ['case', ['in', ['get', 'tanc_local'], ['literal', selectedLocals]], ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color], '#eee'], 'fill-opacity': 0.6 }
   }), [baseMetric, selectedLocals]);
 
   const overlayLayerStyle = useMemo(() => {
@@ -184,118 +234,86 @@ function App() {
     };
   }, [overlayMetric, selectedLocals]);
 
-  const highlightFilter = useMemo(() => selectedFeature ? ['==', 'id', selectedFeature.properties.id] : ['==', 'id', ''], [selectedFeature]);
-
-  const onSelect = (feature) => {
-    setSelectedFeature(feature);
-    if (feature) {
-      mapRef.current?.flyTo({ center: feature.geometry.coordinates[0][0], zoom: 13.5 });
-      if (window.innerWidth <= 768) setActiveTab('targets');
-    }
-  };
-
+  const highlightFilter = useMemo(() => (selectedFeature && selectedFeature.properties.id !== 'AGGREGATE') ? ['==', 'id', selectedFeature.properties.id] : ['==', 'id', ''], [selectedFeature]);
   const getSortIcon = (key) => sortKey !== key ? <span style={{opacity:0.3}}>↕</span> : (sortAsc ? '↑' : '↓');
 
   return (
     <div className="app-container">
-      {showFactSheet && <FactSheet feature={selectedFeature} onClose={() => setShowFactSheet(false)} />}
+      {/* SINGLE FACT SHEET */}
+      {showFactSheet && selectedFeature && (
+        <div className="fs-overlay" onClick={() => setShowFactSheet(false)}>
+          <div className="fs-paper" onClick={e => e.stopPropagation()}>
+            <button className="fs-close" onClick={() => setShowFactSheet(false)}>Close</button>
+            <FactSheetContent p={selectedFeature.properties} />
+          </div>
+        </div>
+      )}
 
+      {/* CONSOLIDATED REPORT MODAL */}
+      {showConsolidated && (
+        <ConsolidatedReport 
+          locals={selectedLocals} // Pass ALL currently checked locals
+          dataFunc={calculateAggregate} // Pass the math function
+          onClose={() => setShowConsolidated(false)} 
+        />
+      )}
+      
       <div className="middle-section">
-        {/* FILTERS */}
         <div className={`sidebar-left ${activeTab === 'controls' ? 'mobile-active' : ''}`}>
           <h1 className="app-header">TANC Map</h1>
+          <div className="control-group"><span className="label-header">Metric</span><div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
+          <div className="control-group"><span className="label-header">Overlay</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
+          
+          {/* LOCALS LIST + BATCH BUTTON */}
           <div className="control-group">
-            <span className="label-header">Color Metric</span>
-            <div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-          </div>
-          <div className="control-group">
-            <span className="label-header">Density Overlay</span>
-            <div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-          </div>
-          <div className="control-group">
-            <span className="label-header">Filter Locals</span>
+            <span className="label-header">Locals</span>
+            
+            {/* NEW BUTTON */}
+            <button 
+              onClick={() => setShowConsolidated(true)}
+              style={{
+                width:'100%', padding:'10px', marginBottom:'12px', background:'#2563eb', 
+                color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem'
+              }}
+            >
+              📄 Generate Report ({selectedLocals.length})
+            </button>
+
             <div className="checkbox-list">
               {allLocals.map(l => (
-                <label key={l} className="checkbox-item">
-                  <input type="checkbox" checked={selectedLocals.includes(l)} onChange={() => setSelectedLocals(prev => prev.includes(l) ? prev.filter(x=>x!==l) : [...prev,l])} /> {l}
-                </label>
+                <div key={l} className="checkbox-row">
+                  <input type="checkbox" checked={selectedLocals.includes(l)} onChange={() => setSelectedLocals(p => p.includes(l) ? p.filter(x=>x!==l) : [...p,l])} />
+                  <span className="local-label-btn" onClick={() => onLocalClick(l)}>{l}</span>
+                </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* MAP */}
         <div className="map-wrapper">
-          <Map
-            ref={mapRef} initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }}
-            mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
-            style={{ width: '100%', height: '100%' }} onLoad={onMapLoad}
-            onMouseMove={e => setHoverInfo(e.features && e.features[0] ? {feature:e.features[0], x:e.point.x, y:e.point.y} : null)}
-            onClick={e => onSelect(e.features && e.features[0] || null)}
-            interactiveLayerIds={['census-base']}
-          >
-            <Source type="geojson" data="/data.geojson">
-              <Layer {...baseLayerStyle} />{overlayLayerStyle && <Layer {...overlayLayerStyle} />}<Layer {...HIGHLIGHT_STYLE} filter={highlightFilter} />
-            </Source>
-            {hoverInfo && (
-              <Popup longitude={hoverInfo.feature.geometry.coordinates[0][0][0]} latitude={hoverInfo.feature.geometry.coordinates[0][0][1]} closeButton={false}>
-                <div style={{color:'black', padding:'4px', fontWeight:'bold', fontSize:'0.9rem'}}>{hoverInfo.feature.properties[baseMetric]}%</div>
-              </Popup>
-            )}
+          <Map ref={mapRef} initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }} mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" style={{width:'100%',height:'100%'}} onLoad={onMapLoad} onClick={e => onSelect(e.features?.[0] || null)} interactiveLayerIds={['census-base']}>
+            <Source type="geojson" data="/data.geojson"><Layer {...baseLayerStyle} />{overlayLayerStyle && <Layer {...overlayLayerStyle} />}<Layer {...HIGHLIGHT_STYLE} filter={highlightFilter} /></Source>
+            {hoverInfo && (<Popup longitude={hoverInfo.feature.geometry.coordinates[0][0][0]} latitude={hoverInfo.feature.geometry.coordinates[0][0][1]} closeButton={false}><div style={{color:'black', padding:'4px', fontWeight:'bold', fontSize:'0.9rem'}}>{hoverInfo.feature.properties[baseMetric]}%</div></Popup>)}
           </Map>
         </div>
 
-        {/* TARGETS */}
         <div className={`sidebar-right ${activeTab === 'targets' ? 'mobile-active' : ''}`}>
-          {selectedFeature && (
-            <div className="pinned-section">
-              <div className="pinned-header"><span>Selected Tract</span><button onClick={() => setSelectedFeature(null)} style={{background:'none', border:'none', cursor:'pointer'}}>×</button></div>
-              <Card p={selectedFeature.properties} metric={baseMetric} isPinned={true} onClick={() => {}} onFactSheet={() => setShowFactSheet(true)} />
-            </div>
-          )}
+          {selectedFeature && selectedFeature.properties.id !== 'AGGREGATE' && (<div className="pinned-section"><Card p={selectedFeature.properties} metric={baseMetric} isPinned={true} onClick={() => onSelect(null)} onFactSheet={() => setShowFactSheet(true)} /></div>)}
           <div className="list-section">
-            <div className="list-header"><span>Top Targets</span><span>{sortedData.length} total</span></div>
-            {sortedData.slice(0, 50).map(p => (
-              <Card key={p.id} p={p} metric={baseMetric} isPinned={false} onClick={() => onSelect({ type:'Feature', geometry: p.geometry || { coordinates: [[[-122,37]]], type: 'Polygon' }, properties: p })} />
-            ))}
+            <div className="right-header"><div>Top Targets</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
+            {sortedData.slice(0, 50).map(p => <Card key={p.id} p={p} metric={baseMetric} isPinned={false} onClick={() => onSelect({ type:'Feature', geometry: p.geometry || { coordinates: [[[-122,37]]], type: 'Polygon' }, properties: p })} />)}
           </div>
         </div>
       </div>
 
-      <div className="mobile-nav">
-        <div className={`tab ${activeTab === 'controls' ? 'active' : ''}`} onClick={() => setActiveTab('controls')}>Filters</div>
-        <div className={`tab ${activeTab === 'targets' ? 'active' : ''}`} onClick={() => setActiveTab('targets')}>Targets</div>
-        <div className={`tab ${activeTab === 'table' ? 'active' : ''}`} onClick={() => setActiveTab('table')}>Data</div>
-      </div>
+      <div className="mobile-nav"><div className={`tab ${activeTab === 'controls'?'active':''}`} onClick={()=>setActiveTab('controls')}>Filters</div><div className={`tab ${activeTab === 'targets'?'active':''}`} onClick={()=>setActiveTab('targets')}>List</div><div className={`tab ${activeTab === 'table'?'active':''}`} onClick={()=>setActiveTab('table')}>Data</div></div>
 
       <div className={`table-section ${isTableExpanded ? 'expanded' : 'collapsed'} ${activeTab === 'table' ? 'mobile-active' : ''}`}>
-        <div className="table-bar" onClick={() => setIsTableExpanded(!isTableExpanded)}>
-          <span>Data Grid {isTableExpanded ? '▼' : '▲'}</span>
-          <span>{sortedData.length} records</span>
-        </div>
-        <div className="table-wrap">
-          <table className="data-grid">
-            <thead>
-              <tr>
-                <th onClick={() => handleSort('tanc_local')}>Local {getSortIcon('tanc_local')}</th>
-                <th onClick={() => handleSort('id')}>ID {getSortIcon('id')}</th>
-                <th onClick={() => handleSort('rent_burden')}>Burden {getSortIcon('rent_burden')}</th>
-                <th onClick={() => handleSort('unemployment')}>Unemp {getSortIcon('unemployment')}</th>
-                <th onClick={() => handleSort('total_pop')}>Pop {getSortIcon('total_pop')}</th>
-                <th onClick={() => handleSort('pct_black')}>Blk {getSortIcon('pct_black')}</th>
-                <th onClick={() => handleSort('pct_hispanic')}>Hisp {getSortIcon('pct_hispanic')}</th>
-                <th onClick={() => handleSort('pct_asian')}>Asn {getSortIcon('pct_asian')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedData.map(row => (
-                <tr key={row.id} onClick={() => onSelect({ properties: row, geometry: { coordinates: [[[-122,37]]] } })} className={selectedFeature?.properties?.id === row.id ? 'is-selected' : ''}>
-                  <td>{row.tanc_local}</td><td>{row.id}</td>
-                  <td style={{fontWeight:'bold', color: row.rent_burden > 40 ? '#dc2626' : 'inherit'}}>{row.rent_burden}%</td>
-                  <td>{row.unemployment}%</td><td>{row.total_pop}</td><td>{row.pct_black}%</td><td>{row.pct_hispanic}%</td><td>{row.pct_asian}%</td>
-                </tr>
-              ))}
-            </tbody>
+        <div className="table-header" onClick={() => setIsTableExpanded(!isTableExpanded)}><span>DATA GRID</span><span>{sortedData.length} rows</span></div>
+        <div className="table-content">
+          <table>
+            <thead><tr><th onClick={() => handleSort('tanc_local')}>Local {getSortIcon('tanc_local')}</th><th onClick={() => handleSort('id')}>ID {getSortIcon('id')}</th><th onClick={() => handleSort('rent_burden')}>Burden {getSortIcon('rent_burden')}</th><th onClick={() => handleSort('unemployment')}>Unemp {getSortIcon('unemployment')}</th><th>Pop</th><th>Blk</th><th>Hisp</th><th>Asn</th></tr></thead>
+            <tbody>{sortedData.map(r => <tr key={r.id} onClick={() => onSelect({properties:r, geometry:{coordinates:[[[-122,37]]]}})} className={selectedFeature?.properties.id===r.id?'selected':''}><td>{r.tanc_local}</td><td>{r.id}</td><td>{r.rent_burden}%</td><td>{r.unemployment}%</td><td>{r.total_pop}</td><td>{r.pct_black}%</td><td>{r.pct_hispanic}%</td><td>{r.pct_asian}%</td></tr>)}</tbody>
           </table>
         </div>
       </div>
