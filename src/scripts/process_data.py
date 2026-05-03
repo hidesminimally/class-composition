@@ -1,6 +1,42 @@
 import pandas as pd
 import geopandas as gpd
 import os
+import config
+
+
+def pct_change_with_cpi(old, new, cpi_factor=1.0):
+    """Percent change after adjusting old value to new dollars via CPI factor."""
+    if old is None or new is None or pd.isna(old) or pd.isna(new) or old == 0:
+        return None
+    adjusted_old = old * cpi_factor
+    if adjusted_old == 0:
+        return None
+    return round((new - adjusted_old) / adjusted_old * 100, 1)
+
+
+def crosswalk_weighted_avg(df_old: pd.DataFrame, crosswalk: pd.DataFrame, value_cols: list) -> pd.DataFrame:
+    """
+    Apply 2010-to-2020 tract crosswalk: weight each old-tract value by area_pct
+    of the (old -> new) mapping. Returns one row per 2020 tract with weighted values.
+
+    For tracts that didn't change, area_pct=1.0 -> values pass through.
+    For 1->many splits, the old tract's values are distributed by area weight.
+    For many->1 merges, the new tract aggregates weighted contributions.
+    """
+    # Join old data to crosswalk on 2010 tract id
+    merged = crosswalk.merge(df_old, left_on='tract_2010', right_on='id', how='left')
+
+    # Multiply each value column by area_pct
+    for col in value_cols:
+        if col in merged.columns:
+            merged[f'{col}_weighted'] = merged[col] * merged['area_pct']
+
+    # Sum (weighted) by 2020 tract id
+    agg_dict = {f'{col}_weighted': 'sum' for col in value_cols if f'{col}_weighted' in merged.columns}
+    out = merged.groupby('tract_2020').agg(agg_dict).reset_index()
+    out = out.rename(columns={'tract_2020': 'id', **{f'{col}_weighted': col for col in value_cols}})
+    return out
+
 
 # CONFIG
 MANUAL_LOCALS_FILE = "tanc_data_clean.csv" # Your existing sheet with "TANC Local" assignments
