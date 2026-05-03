@@ -7,6 +7,7 @@ import { METRICS, HIGHLIGHT_STYLE } from './config/metrics';
 import FactSheet from './components/FactSheet';
 import ConsolidatedReport from './components/ConsolidatedReport';
 import Card from './components/Card';
+import DataTable from './components/DataTable';
 
 // --- UTILITIES ---
 function generateDotPattern(density) {
@@ -111,7 +112,6 @@ function App() {
   }, [overlayMetric, selectedLocals]);
 
   const highlightFilter = useMemo(() => (selectedFeature && selectedFeature.properties.id !== 'AGGREGATE') ? ['==', 'id', selectedFeature.properties.id] : ['==', 'id', ''], [selectedFeature]);
-  const getSortIcon = (key) => sortKey !== key ? <span style={{opacity:0.3}}>↕</span> : (sortAsc ? '↑' : '↓');
 
   return (
     <div className="app-container">
@@ -184,15 +184,17 @@ function App() {
 
       <div className="mobile-nav"><div className={`tab ${activeTab === 'controls'?'active':''}`} onClick={()=>setActiveTab('controls')}>Filters</div><div className={`tab ${activeTab === 'targets'?'active':''}`} onClick={()=>setActiveTab('targets')}>List</div><div className={`tab ${activeTab === 'table'?'active':''}`} onClick={()=>setActiveTab('table')}>Data</div></div>
 
-      <div className={`table-section ${isTableExpanded ? 'expanded' : 'collapsed'} ${activeTab === 'table' ? 'mobile-active' : ''}`}>
-        <div className="table-header" onClick={() => setIsTableExpanded(!isTableExpanded)}><span>DATA GRID</span><span>{sortedData.length} rows</span></div>
-        <div className="table-content">
-          <table>
-            <thead><tr><th onClick={() => handleSort('tanc_local')}>Local {getSortIcon('tanc_local')}</th><th onClick={() => handleSort('id')}>ID {getSortIcon('id')}</th><th onClick={() => handleSort('rent_burden')}>Burden {getSortIcon('rent_burden')}</th><th onClick={() => handleSort('unemployment')}>Unemp {getSortIcon('unemployment')}</th><th>Pop</th><th>Blk</th><th>Hisp</th><th>Asn</th></tr></thead>
-            <tbody>{sortedData.map(r => <tr key={r.id} onClick={() => onSelect({properties:r, geometry:{coordinates:[[[-122,37]]]}})} className={selectedFeature?.properties.id===r.id?'selected':''}><td>{r.tanc_local}</td><td>{r.id}</td><td>{r.rent_burden}%</td><td>{r.unemployment}%</td><td>{r.total_pop}</td><td>{r.pct_black}%</td><td>{r.pct_hispanic}%</td><td>{r.pct_asian}%</td></tr>)}</tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        rows={sortedData}
+        isExpanded={isTableExpanded}
+        onToggleExpanded={() => setIsTableExpanded(!isTableExpanded)}
+        sortKey={sortKey}
+        sortAsc={sortAsc}
+        onSort={handleSort}
+        selectedId={selectedFeature?.properties.id}
+        onSelect={onSelect}
+        mobileActive={activeTab === 'table'}
+      />
     </div>
   );
 }
