@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
-
 import { METRICS } from './config/metrics';
 import FactSheet from './components/FactSheet';
 import ConsolidatedReport from './components/ConsolidatedReport';
@@ -8,20 +7,14 @@ import Card from './components/Card';
 import DataTable from './components/DataTable';
 import TancMap from './components/Map';
 
-
-// --- APP ---
 function App() {
   const mapRef = useRef();
-  
   const [baseMetric, setBaseMetric] = useState('rent_burden');
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('controls');
-  
-  // MODAL STATES
   const [showFactSheet, setShowFactSheet] = useState(false);
-  const [showConsolidated, setShowConsolidated] = useState(false); // NEW STATE
-  
+  const [showConsolidated, setShowConsolidated] = useState(false);
   const [sortKey, setSortKey] = useState('rent_burden');
   const [sortAsc, setSortAsc] = useState(false);
   const [mapData, setMapData] = useState([]);
@@ -38,7 +31,6 @@ function App() {
     }).catch(console.error);
   }, []);
 
-  // AGGREGATION LOGIC (Reused for Consolidated Report)
   const calculateAggregate = (localName) => {
     const tracts = mapData.filter(f => f.properties.tanc_local === localName).map(f => f.properties);
     if (!tracts.length) return null;
@@ -80,7 +72,6 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* SINGLE FACT SHEET */}
       {showFactSheet && selectedFeature && (
         <div className="fs-overlay" onClick={() => setShowFactSheet(false)}>
           <div className="fs-paper" onClick={e => e.stopPropagation()}>
@@ -90,36 +81,23 @@ function App() {
         </div>
       )}
 
-      {/* CONSOLIDATED REPORT MODAL */}
       {showConsolidated && (
-        <ConsolidatedReport 
-          locals={selectedLocals} // Pass ALL currently checked locals
-          dataFunc={calculateAggregate} // Pass the math function
-          onClose={() => setShowConsolidated(false)} 
+        <ConsolidatedReport
+          locals={selectedLocals}
+          dataFunc={calculateAggregate}
+          onClose={() => setShowConsolidated(false)}
         />
       )}
-      
       <div className="middle-section">
         <div className={`sidebar-left ${activeTab === 'controls' ? 'mobile-active' : ''}`}>
           <h1 className="app-header">TANC Map</h1>
           <div className="control-group"><span className="label-header">Metric</span><div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
           <div className="control-group"><span className="label-header">Overlay</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
-          
-          {/* LOCALS LIST + BATCH BUTTON */}
           <div className="control-group">
             <span className="label-header">Locals</span>
-            
-            {/* NEW BUTTON */}
-            <button 
-              onClick={() => setShowConsolidated(true)}
-              style={{
-                width:'100%', padding:'10px', marginBottom:'12px', background:'#2563eb', 
-                color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem'
-              }}
-            >
-              📄 Generate Report ({selectedLocals.length})
+            <button onClick={() => setShowConsolidated(true)} style={{width:'100%',padding:'10px',marginBottom:'12px',background:'#2563eb',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'bold',fontSize:'0.8rem'}}>
+              Generate Report ({selectedLocals.length})
             </button>
-
             <div className="checkbox-list">
               {allLocals.map(l => (
                 <div key={l} className="checkbox-row">
