@@ -1,164 +1,21 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import Map, { Source, Layer, Popup } from 'react-map-gl/maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import './App.css';
+import { METRICS } from './config/metrics';
+import FactSheet from './components/FactSheet';
+import ConsolidatedReport from './components/ConsolidatedReport';
+import Card from './components/Card';
+import DataTable from './components/DataTable';
+import TancMap from './components/Map';
+import TargetingPanel from './components/TargetingPanel';
 
-// --- CONFIG ---
-const METRICS = {
-  rent_burden: { label: "Rent Burden", color: "#ef3b2c", max: 60 },
-  unemployment: { label: "Unemployment", color: "#2563eb", max: 15 },
-  pct_hispanic: { label: "% Hispanic", color: "#16a34a", max: 80 },
-  pct_black: { label: "% Black", color: "#ea580c", max: 80 },
-  pct_asian: { label: "% Asian", color: "#9333ea", max: 80 },
-  pct_white: { label: "% White", color: "#64748b", max: 80 }
-};
-
-const HIGHLIGHT_STYLE = {
-  id: 'highlight', type: 'line',
-  paint: { 'line-color': '#00FFFF', 'line-width': 4 }
-};
-
-// --- UTILITIES ---
-function generateDotPattern(density) {
-  const size = 12; const ctx = document.createElement('canvas').getContext('2d');
-  ctx.canvas.width = size; ctx.canvas.height = size;
-  ctx.clearRect(0, 0, size, size); ctx.fillStyle = 'rgba(0,0,0,0.85)'; 
-  const r = 1.3;
-  if (density >= 1) { ctx.beginPath(); ctx.arc(6, 6, r, 0, Math.PI*2); ctx.fill(); }
-  if (density >= 2) { ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(12, 12, r, 0, Math.PI*2); ctx.fill(); }
-  if (density >= 3) { ctx.beginPath(); ctx.arc(12, 0, r, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 12, r, 0, Math.PI*2); ctx.fill(); }
-  if (density >= 4) { ctx.beginPath(); ctx.arc(6, 0, r, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(6, 12, r, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 6, r, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(12, 6, r, 0, Math.PI*2); ctx.fill(); }
-  return ctx.getImageData(0, 0, size, size);
-}
-
-// --- CORE COMPONENT: THE PAPER FACT SHEET (Reusable) ---
-const FactSheetContent = ({ p }) => {
-  const isAgg = p.id === 'AGGREGATE';
-  return (
-    <div style={{height:'100%', display:'flex', flexDirection:'column'}}>
-      <div style={{borderBottom:'4px solid #0f172a', paddingBottom:20, marginBottom:30}}>
-        <h1 style={{fontSize:'2.5rem', fontWeight:800, margin:0, lineHeight:1}}>
-          {isAgg ? `${p.tanc_local} Local` : `Tract ${p.id}`}
-        </h1>
-        <div style={{color:'#64748b', marginTop:5, fontSize:'1.1rem'}}>
-          {isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter`}
-        </div>
-      </div>
-
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:40}}>
-        {/* LEFT COL */}
-        <div>
-          <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', fontSize:'0.85rem', fontWeight:800, letterSpacing:'0.05em'}}>RISK METRICS</h3>
-          <div style={{display:'flex', gap:30, marginTop:20, marginBottom:20}}>
-            <div>
-              <div style={{fontSize:'3.5rem', fontWeight:800, color:'#ef3b2c', lineHeight:1}}>{p.rent_burden}%</div>
-              <div style={{color:'#64748b', fontWeight:600, fontSize:'0.9rem', marginTop:5}}>Rent Burden</div>
-            </div>
-            <div>
-              <div style={{fontSize:'3.5rem', fontWeight:800, color:'#2563eb', lineHeight:1}}>{p.unemployment}%</div>
-              <div style={{color:'#64748b', fontWeight:600, fontSize:'0.9rem', marginTop:5}}>Unemployment</div>
-            </div>
-          </div>
-          <p style={{lineHeight:1.6, fontSize:'1rem', color:'#334155'}}>
-            Total Population: <strong>{p.total_pop?.toLocaleString()}</strong>.<br/>
-            {isAgg 
-              ? "Data represents a weighted average across all census tracts within this Local's jurisdiction." 
-              : (p.rent_burden > 40 ? "This tract shows severe housing distress signs." : "This tract shows moderate housing stability.")}
-          </p>
-        </div>
-
-        {/* RIGHT COL */}
-        <div>
-          <h3 style={{borderBottom:'1px solid #ddd', paddingBottom:8, color:'#64748b', fontSize:'0.85rem', fontWeight:800, letterSpacing:'0.05em'}}>DEMOGRAPHICS</h3>
-          <div style={{marginTop:20, marginBottom:20}}>
-            <div style={{display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid #e2e8f0'}}>
-              <div style={{width:`${p.pct_black}%`, background:'#ea580c'}} />
-              <div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}} />
-              <div style={{width:`${p.pct_asian}%`, background:'#9333ea'}} />
-              <div style={{flex:1, background:'#f1f5f9'}} />
-            </div>
-          </div>
-          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Black / African American</span><strong>{p.pct_black}%</strong></div>
-          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Hispanic / Latinx</span><strong>{p.pct_hispanic}%</strong></div>
-          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>Asian</span><strong>{p.pct_asian}%</strong></div>
-          <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f1f5f9'}}><span>White / Other</span><strong>{p.pct_white}%</strong></div>
-        </div>
-      </div>
-
-      <div style={{marginTop:'auto', paddingTop:30, borderTop:'1px dashed #cbd5e1', textAlign:'center', color:'#94a3b8', fontSize:'0.8rem'}}>
-        TANC Internal Document • Generated {new Date().toLocaleDateString()}
-      </div>
-    </div>
-  );
-};
-
-// --- NEW COMPONENT: CONSOLIDATED REPORT ---
-const ConsolidatedReport = ({ locals, onClose, dataFunc }) => {
-  // Generate data for ALL requested locals
-  const reports = locals.map(local => dataFunc(local)).filter(Boolean);
-
-  return (
-    <div className="report-modal">
-      <div className="report-controls">
-        <button className="btn-primary" onClick={() => window.print()}>Print / Save PDF</button>
-        <button className="btn-secondary" onClick={onClose}>Close</button>
-      </div>
-      <div className="report-container">
-        {reports.map((stats, i) => (
-          <div key={i} className="report-page">
-            <FactSheetContent p={stats} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// --- EXISTING COMPONENTS (Card, etc) ---
-const Card = ({ p, metric, isPinned, onClick, onFactSheet }) => {
-  if (isPinned) {
-    return (
-      <div className="stat-card pinned">
-        <div className="pinned-left">
-          <h3>{p.tanc_local}</h3><span>Tract {p.id}</span>
-        </div>
-        <div className="pinned-right">
-          <div className="pinned-metric" style={{color: METRICS[metric].color}}>{p[metric]}%</div>
-          <button className="pinned-btn" onClick={(e) => { e.stopPropagation(); onFactSheet(); }}>Sheet</button>
-          <button onClick={onClick} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#94a3b8'}}>×</button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="stat-card" onClick={onClick}>
-      <div className="card-top">
-        <div><div className="card-title">{p.tanc_local}</div><div className="card-sub">Tract {p.id}</div></div>
-        <div className="card-val" style={{color: METRICS[metric].color}}>{p[metric]}%</div>
-      </div>
-      <div className="card-grid">
-        <div><b>{p.total_pop}</b> Pop</div><div><b>{p.unemployment}%</b> Unemp</div><div><b>{p.rent_burden}%</b> Burden</div>
-      </div>
-      <div className="mini-bar">
-        <div style={{width:`${p.pct_black}%`, background:'#ea580c'}} /><div style={{width:`${p.pct_hispanic}%`, background:'#16a34a'}} /><div style={{width:`${p.pct_asian}%`, background:'#9333ea'}} /><div style={{flex:1, background:'#e2e8f0'}} />
-      </div>
-    </div>
-  );
-};
-
-// --- APP ---
 function App() {
   const mapRef = useRef();
-  
   const [baseMetric, setBaseMetric] = useState('rent_burden');
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('controls');
-  
-  // MODAL STATES
   const [showFactSheet, setShowFactSheet] = useState(false);
-  const [showConsolidated, setShowConsolidated] = useState(false); // NEW STATE
-  
+  const [showConsolidated, setShowConsolidated] = useState(false);
   const [sortKey, setSortKey] = useState('rent_burden');
   const [sortAsc, setSortAsc] = useState(false);
   const [mapData, setMapData] = useState([]);
@@ -166,6 +23,7 @@ function App() {
   const [selectedLocals, setSelectedLocals] = useState([]);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [hoverInfo, setHoverInfo] = useState(null);
+  const [targetingLocal, setTargetingLocal] = useState(null);
 
   useEffect(() => {
     fetch('/data.geojson').then(r => r.json()).then(json => {
@@ -175,11 +33,6 @@ function App() {
     }).catch(console.error);
   }, []);
 
-  const onMapLoad = (e) => {
-    [1, 2, 3, 4].forEach(level => { if (!e.target.hasImage(`dots-${level}`)) e.target.addImage(`dots-${level}`, generateDotPattern(level)); });
-  };
-
-  // AGGREGATION LOGIC (Reused for Consolidated Report)
   const calculateAggregate = (localName) => {
     const tracts = mapData.filter(f => f.properties.tanc_local === localName).map(f => f.properties);
     if (!tracts.length) return null;
@@ -211,6 +64,11 @@ function App() {
 
   const handleSort = (key) => { if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(false); } };
 
+  const targetingFeatures = useMemo(() => {
+    if (!targetingLocal) return [];
+    return mapData.filter(f => f.properties.tanc_local === targetingLocal);
+  }, [mapData, targetingLocal]);
+
   const onSelect = (f) => {
     setSelectedFeature(f);
     if (f && f.geometry) {
@@ -219,71 +77,44 @@ function App() {
     }
   };
 
-  const baseLayerStyle = useMemo(() => ({
-    id: 'census-base', type: 'fill', paint: { 'fill-color': ['case', ['in', ['get', 'tanc_local'], ['literal', selectedLocals]], ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color], '#eee'], 'fill-opacity': 0.6 }
-  }), [baseMetric, selectedLocals]);
-
-  const overlayLayerStyle = useMemo(() => {
-    if (overlayMetric === 'none') return null;
-    const { max } = METRICS[overlayMetric];
-    const steps = [0.2, 0.4, 0.6, 0.8].map(p => max * p);
-    return {
-      id: 'census-pattern', type: 'fill',
-      paint: { 'fill-pattern': ['step', ['get', overlayMetric], 'dots-1', steps[0], 'dots-1', steps[1], 'dots-2', steps[2], 'dots-3', steps[3], 'dots-4'], 'fill-opacity': 0.5 },
-      filter: ['all', ['in', ['get', 'tanc_local'], ['literal', selectedLocals]], ['>', ['get', overlayMetric], steps[0]]]
-    };
-  }, [overlayMetric, selectedLocals]);
-
-  const highlightFilter = useMemo(() => (selectedFeature && selectedFeature.properties.id !== 'AGGREGATE') ? ['==', 'id', selectedFeature.properties.id] : ['==', 'id', ''], [selectedFeature]);
-  const getSortIcon = (key) => sortKey !== key ? <span style={{opacity:0.3}}>↕</span> : (sortAsc ? '↑' : '↓');
-
   return (
     <div className="app-container">
-      {/* SINGLE FACT SHEET */}
       {showFactSheet && selectedFeature && (
         <div className="fs-overlay" onClick={() => setShowFactSheet(false)}>
           <div className="fs-paper" onClick={e => e.stopPropagation()}>
             <button className="fs-close" onClick={() => setShowFactSheet(false)}>Close</button>
-            <FactSheetContent p={selectedFeature.properties} />
+            <FactSheet p={selectedFeature.properties} />
           </div>
         </div>
       )}
 
-      {/* CONSOLIDATED REPORT MODAL */}
       {showConsolidated && (
-        <ConsolidatedReport 
-          locals={selectedLocals} // Pass ALL currently checked locals
-          dataFunc={calculateAggregate} // Pass the math function
-          onClose={() => setShowConsolidated(false)} 
+        <ConsolidatedReport
+          locals={selectedLocals}
+          dataFunc={calculateAggregate}
+          onClose={() => setShowConsolidated(false)}
         />
       )}
-      
       <div className="middle-section">
         <div className={`sidebar-left ${activeTab === 'controls' ? 'mobile-active' : ''}`}>
           <h1 className="app-header">TANC Map</h1>
           <div className="control-group"><span className="label-header">Metric</span><div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
-          <div className="control-group"><span className="label-header">Overlay</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
-          
-          {/* LOCALS LIST + BATCH BUTTON */}
+          <div className="control-group"><span className="label-header">Second Metric (bivariate)</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None (univariate) --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
           <div className="control-group">
             <span className="label-header">Locals</span>
-            
-            {/* NEW BUTTON */}
-            <button 
-              onClick={() => setShowConsolidated(true)}
-              style={{
-                width:'100%', padding:'10px', marginBottom:'12px', background:'#2563eb', 
-                color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem'
-              }}
-            >
-              📄 Generate Report ({selectedLocals.length})
+            <button onClick={() => setShowConsolidated(true)} style={{width:'100%',padding:'10px',marginBottom:'12px',background:'#2563eb',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'bold',fontSize:'0.8rem'}}>
+              Generate Report ({selectedLocals.length})
             </button>
-
             <div className="checkbox-list">
               {allLocals.map(l => (
                 <div key={l} className="checkbox-row">
                   <input type="checkbox" checked={selectedLocals.includes(l)} onChange={() => setSelectedLocals(p => p.includes(l) ? p.filter(x=>x!==l) : [...p,l])} />
-                  <span className="local-label-btn" onClick={() => onLocalClick(l)}>{l}</span>
+                  <span className="local-label-btn" onClick={() => onLocalClick(l)} style={{flex:1}}>{l}</span>
+                  <button
+                    title="Open targeting panel"
+                    onClick={() => setTargetingLocal(targetingLocal === l ? null : l)}
+                    style={{background:'none', border:'none', cursor:'pointer', fontSize:'1rem', padding:'0 4px', opacity: targetingLocal === l ? 1 : 0.5}}
+                  >🎯</button>
                 </div>
               ))}
             </div>
@@ -291,14 +122,27 @@ function App() {
         </div>
 
         <div className="map-wrapper">
-          <Map ref={mapRef} initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }} mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" style={{width:'100%',height:'100%'}} onLoad={onMapLoad} onClick={e => onSelect(e.features?.[0] || null)} interactiveLayerIds={['census-base']}>
-            <Source type="geojson" data="/data.geojson"><Layer {...baseLayerStyle} />{overlayLayerStyle && <Layer {...overlayLayerStyle} />}<Layer {...HIGHLIGHT_STYLE} filter={highlightFilter} /></Source>
-            {hoverInfo && (<Popup longitude={hoverInfo.feature.geometry.coordinates[0][0][0]} latitude={hoverInfo.feature.geometry.coordinates[0][0][1]} closeButton={false}><div style={{color:'black', padding:'4px', fontWeight:'bold', fontSize:'0.9rem'}}>{hoverInfo.feature.properties[baseMetric]}%</div></Popup>)}
-          </Map>
+          <TancMap
+            ref={mapRef}
+            baseMetric={baseMetric}
+            overlayMetric={overlayMetric}
+            selectedLocals={selectedLocals}
+            selectedFeature={selectedFeature}
+            onSelect={onSelect}
+            hoverInfo={hoverInfo}
+            allFeatures={mapData}
+          />
         </div>
 
         <div className={`sidebar-right ${activeTab === 'targets' ? 'mobile-active' : ''}`}>
           {selectedFeature && selectedFeature.properties.id !== 'AGGREGATE' && (<div className="pinned-section"><Card p={selectedFeature.properties} metric={baseMetric} isPinned={true} onClick={() => onSelect(null)} onFactSheet={() => setShowFactSheet(true)} /></div>)}
+          {targetingLocal && (
+            <TargetingPanel
+              tracts={targetingFeatures}
+              currentLocal={targetingLocal}
+              onSelectTract={(t) => onSelect(t)}
+            />
+          )}
           <div className="list-section">
             <div className="right-header"><div>Top Targets</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
             {sortedData.slice(0, 50).map(p => <Card key={p.id} p={p} metric={baseMetric} isPinned={false} onClick={() => onSelect({ type:'Feature', geometry: p.geometry || { coordinates: [[[-122,37]]], type: 'Polygon' }, properties: p })} />)}
@@ -308,15 +152,17 @@ function App() {
 
       <div className="mobile-nav"><div className={`tab ${activeTab === 'controls'?'active':''}`} onClick={()=>setActiveTab('controls')}>Filters</div><div className={`tab ${activeTab === 'targets'?'active':''}`} onClick={()=>setActiveTab('targets')}>List</div><div className={`tab ${activeTab === 'table'?'active':''}`} onClick={()=>setActiveTab('table')}>Data</div></div>
 
-      <div className={`table-section ${isTableExpanded ? 'expanded' : 'collapsed'} ${activeTab === 'table' ? 'mobile-active' : ''}`}>
-        <div className="table-header" onClick={() => setIsTableExpanded(!isTableExpanded)}><span>DATA GRID</span><span>{sortedData.length} rows</span></div>
-        <div className="table-content">
-          <table>
-            <thead><tr><th onClick={() => handleSort('tanc_local')}>Local {getSortIcon('tanc_local')}</th><th onClick={() => handleSort('id')}>ID {getSortIcon('id')}</th><th onClick={() => handleSort('rent_burden')}>Burden {getSortIcon('rent_burden')}</th><th onClick={() => handleSort('unemployment')}>Unemp {getSortIcon('unemployment')}</th><th>Pop</th><th>Blk</th><th>Hisp</th><th>Asn</th></tr></thead>
-            <tbody>{sortedData.map(r => <tr key={r.id} onClick={() => onSelect({properties:r, geometry:{coordinates:[[[-122,37]]]}})} className={selectedFeature?.properties.id===r.id?'selected':''}><td>{r.tanc_local}</td><td>{r.id}</td><td>{r.rent_burden}%</td><td>{r.unemployment}%</td><td>{r.total_pop}</td><td>{r.pct_black}%</td><td>{r.pct_hispanic}%</td><td>{r.pct_asian}%</td></tr>)}</tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        rows={sortedData}
+        isExpanded={isTableExpanded}
+        onToggleExpanded={() => setIsTableExpanded(!isTableExpanded)}
+        sortKey={sortKey}
+        sortAsc={sortAsc}
+        onSort={handleSort}
+        selectedId={selectedFeature?.properties.id}
+        onSelect={onSelect}
+        mobileActive={activeTab === 'table'}
+      />
     </div>
   );
 }
