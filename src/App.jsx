@@ -6,6 +6,7 @@ import ConsolidatedReport from './components/ConsolidatedReport';
 import Card from './components/Card';
 import DataTable from './components/DataTable';
 import TancMap from './components/Map';
+import TargetingPanel from './components/TargetingPanel';
 
 function App() {
   const mapRef = useRef();
@@ -22,6 +23,7 @@ function App() {
   const [selectedLocals, setSelectedLocals] = useState([]);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [hoverInfo, setHoverInfo] = useState(null);
+  const [targetingLocal, setTargetingLocal] = useState(null);
 
   useEffect(() => {
     fetch('/data.geojson').then(r => r.json()).then(json => {
@@ -61,6 +63,11 @@ function App() {
   }, [mapData, selectedLocals, sortKey, sortAsc]);
 
   const handleSort = (key) => { if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(false); } };
+
+  const targetingFeatures = useMemo(() => {
+    if (!targetingLocal) return [];
+    return mapData.filter(f => f.properties.tanc_local === targetingLocal);
+  }, [mapData, targetingLocal]);
 
   const onSelect = (f) => {
     setSelectedFeature(f);
@@ -102,7 +109,12 @@ function App() {
               {allLocals.map(l => (
                 <div key={l} className="checkbox-row">
                   <input type="checkbox" checked={selectedLocals.includes(l)} onChange={() => setSelectedLocals(p => p.includes(l) ? p.filter(x=>x!==l) : [...p,l])} />
-                  <span className="local-label-btn" onClick={() => onLocalClick(l)}>{l}</span>
+                  <span className="local-label-btn" onClick={() => onLocalClick(l)} style={{flex:1}}>{l}</span>
+                  <button
+                    title="Open targeting panel"
+                    onClick={() => setTargetingLocal(targetingLocal === l ? null : l)}
+                    style={{background:'none', border:'none', cursor:'pointer', fontSize:'1rem', padding:'0 4px', opacity: targetingLocal === l ? 1 : 0.5}}
+                  >🎯</button>
                 </div>
               ))}
             </div>
@@ -124,6 +136,13 @@ function App() {
 
         <div className={`sidebar-right ${activeTab === 'targets' ? 'mobile-active' : ''}`}>
           {selectedFeature && selectedFeature.properties.id !== 'AGGREGATE' && (<div className="pinned-section"><Card p={selectedFeature.properties} metric={baseMetric} isPinned={true} onClick={() => onSelect(null)} onFactSheet={() => setShowFactSheet(true)} /></div>)}
+          {targetingLocal && (
+            <TargetingPanel
+              tracts={targetingFeatures}
+              currentLocal={targetingLocal}
+              onSelectTract={(t) => onSelect(t)}
+            />
+          )}
           <div className="list-section">
             <div className="right-header"><div>Top Targets</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
             {sortedData.slice(0, 50).map(p => <Card key={p.id} p={p} metric={baseMetric} isPinned={false} onClick={() => onSelect({ type:'Feature', geometry: p.geometry || { coordinates: [[[-122,37]]], type: 'Polygon' }, properties: p })} />)}
