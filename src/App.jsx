@@ -92,7 +92,7 @@ function App() {
         <div className={`sidebar-left ${activeTab === 'controls' ? 'mobile-active' : ''}`}>
           <h1 className="app-header">TANC Map</h1>
           <div className="control-group"><span className="label-header">Metric</span><div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
-          <div className="control-group"><span className="label-header">Overlay</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
+          <div className="control-group"><span className="label-header">Second Metric (bivariate)</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None (univariate) --</option>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
           <div className="control-group">
             <span className="label-header">Locals</span>
             <button onClick={() => setShowConsolidated(true)} style={{width:'100%',padding:'10px',marginBottom:'12px',background:'#2563eb',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'bold',fontSize:'0.8rem'}}>
@@ -118,6 +118,7 @@ function App() {
             selectedFeature={selectedFeature}
             onSelect={onSelect}
             hoverInfo={hoverInfo}
+            allFeatures={mapData}
           />
         </div>
 
