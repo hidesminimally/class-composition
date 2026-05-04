@@ -33,3 +33,4 @@ scripts/config.py
 __pycache__/
 *.csv
 *.geojsonsrc/scripts/tab20_tract20_tract10_st06.txt
+src/scripts/tanc_map_data.geojson
