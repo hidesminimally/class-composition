@@ -7,6 +7,7 @@ import Card from './components/Card';
 import DataTable from './components/DataTable';
 import TancMap from './components/Map';
 import TargetingPanel from './components/TargetingPanel';
+import VersionBadge from './components/VersionBadge';
 import { calculateAggregate } from './lib/aggregate';
 import { sortFeatures, filterByLocals } from './lib/sort';
 import { getCentroid } from './lib/targeting';
@@ -185,6 +186,8 @@ function App() {
         onSelect={onSelect}
         mobileActive={activeTab === 'table'}
       />
+
+      <VersionBadge />
     </div>
   );
 }
