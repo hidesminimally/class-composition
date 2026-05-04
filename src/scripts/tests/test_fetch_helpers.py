@@ -7,7 +7,7 @@ import math
 import pandas as pd
 import pytest
 
-from fetch_census import compute_derived_metrics
+from fetch_census import compute_derived_metrics, normalize_census_nulls
 from fetch_crosswalk import parse_crosswalk
 
 
@@ -217,6 +217,30 @@ def test_class_metrics_skip_when_universe_columns_missing():
     assert 'pct_limited_eng_any' not in out.columns
     assert 'pct_pub_assist_or_snap' not in out.columns
     assert 'pct_under_35k' not in out.columns
+
+
+# ---------- normalize_census_nulls ----------
+
+def test_replaces_negative_sentinels_with_nan():
+    df = pd.DataFrame({
+        'median_gross_rent': [-666666666, 1500, -888888888, 2000],
+        'median_hh_income': [80000, -999999999, 60000, 120000],
+        'tract': ['1', '2', '3', '4'],  # string col, must not be touched
+    })
+    out = normalize_census_nulls(df)
+    assert math.isnan(out['median_gross_rent'].iloc[0])
+    assert out['median_gross_rent'].iloc[1] == 1500
+    assert math.isnan(out['median_gross_rent'].iloc[2])
+    assert math.isnan(out['median_hh_income'].iloc[1])
+    # Non-numeric column untouched
+    assert list(out['tract']) == ['1', '2', '3', '4']
+
+
+def test_normalize_does_not_touch_legitimate_negatives():
+    # E.g. negative deltas should stay negative
+    df = pd.DataFrame({'pct_white_delta_pct': [-15.3, 22.1, -3.0]})
+    out = normalize_census_nulls(df)
+    assert out['pct_white_delta_pct'].iloc[0] == -15.3
 
 
 # ---------- parse_crosswalk ----------

@@ -13,8 +13,42 @@ VINTAGE_YEAR_MAP = {
     "2010": 2012,  # latest year in 2008-2012 5-year
 }
 
-# Variables that may not be available in older vintages — degrade gracefully
-GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_']
+# Variables that may not be available in older vintages — degrade gracefully.
+# Class-composition layer (B05*/C16002/B19058/B25044/B19001) was only needed for
+# 2020 (current snapshot), so dropping it from 2010 is intentional.
+GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_', 'B05001_', 'B05002_',
+                             'C16002_', 'B19058_', 'B25044_', 'B19001_']
+
+# Census API "annotation" sentinels meaning "data not available / suppressed".
+# See https://www.census.gov/data/developers/data-sets/acs-5year/data-notes.html
+# These must be replaced with NaN before any arithmetic — otherwise they
+# propagate through CPI math and produce nonsense like -$666M median rent.
+CENSUS_NULL_SENTINELS = [-666666666, -888888888, -999999999, -222222222,
+                         -333333333, -555555555, -111111111]
+
+
+ID_COLS = {'state', 'county', 'tract', 'NAME', 'id', 'GEOID'}
+
+
+def normalize_census_nulls(df):
+    """Replace Census API null/suppressed-data sentinels with NaN. The API
+    returns numbers as strings, so for non-numeric columns we replace string
+    sentinels then attempt numeric coercion. Identifier columns (state,
+    county, tract, NAME, id) are explicitly skipped to preserve leading zeros
+    and string formatting."""
+    str_sentinels = [str(s) for s in CENSUS_NULL_SENTINELS]
+    for col in df.columns:
+        if col in ID_COLS:
+            continue
+        kind = df[col].dtype.kind
+        if kind in 'fi':
+            df[col] = df[col].replace(CENSUS_NULL_SENTINELS, np.nan)
+        else:
+            cleaned = df[col].replace(str_sentinels, np.nan)
+            coerced = pd.to_numeric(cleaned, errors='coerce')
+            if coerced.notna().sum() == cleaned.notna().sum():
+                df[col] = coerced
+    return df
 
 
 def _get_fields_for_vintage(vintage):
@@ -66,6 +100,9 @@ def fetch_and_clean_data(vintage="2020"):
     df = pd.DataFrame(raw_data)
     df = df.rename(columns=fields)
     df['id'] = df['tract'].astype(str).str.zfill(6)
+
+    # Replace Census null sentinels (-666666666 etc.) BEFORE math
+    df = normalize_census_nulls(df)
 
     print(f"   Fetched {len(df)} tracts. Calculating derived metrics...")
     df = compute_derived_metrics(df)
