@@ -146,6 +146,79 @@ def test_handles_multiple_rows():
     assert out['pct_black'].iloc[1] == 25.0
 
 
+# ---------- class composition layer ----------
+
+def test_pct_foreign_born():
+    df = pd.DataFrame([_base_row(nativity_total=1000, pop_foreign_born=350)])
+    out = compute_derived_metrics(df)
+    assert out['pct_foreign_born'].iloc[0] == 35.0
+
+
+def test_citizenship_split():
+    df = pd.DataFrame([_base_row(citizenship_total=1000, pop_naturalized=200, pop_noncitizen=150)])
+    out = compute_derived_metrics(df)
+    assert out['pct_naturalized'].iloc[0] == 20.0
+    assert out['pct_noncitizen'].iloc[0] == 15.0
+
+
+def test_limited_english_per_language_family():
+    row = _base_row(
+        hh_lang_total=1000,
+        hh_limited_eng_spanish=120, hh_limited_eng_indoeuropean=30,
+        hh_limited_eng_apilang=80, hh_limited_eng_other=20,
+    )
+    df = pd.DataFrame([row])
+    out = compute_derived_metrics(df)
+    assert out['pct_limited_eng_spanish'].iloc[0] == 12.0
+    assert out['pct_limited_eng_apilang'].iloc[0] == 8.0
+    # Aggregate "any limited-English HH" = 250/1000 = 25%
+    assert out['pct_limited_eng_any'].iloc[0] == 25.0
+
+
+def test_limited_english_zero_households_safe():
+    row = _base_row(hh_lang_total=0, hh_limited_eng_spanish=0,
+                    hh_limited_eng_indoeuropean=0, hh_limited_eng_apilang=0,
+                    hh_limited_eng_other=0)
+    df = pd.DataFrame([row])
+    out = compute_derived_metrics(df)
+    assert out['pct_limited_eng_spanish'].iloc[0] == 0.0
+    assert out['pct_limited_eng_any'].iloc[0] == 0.0
+
+
+def test_snap_public_assistance_rate():
+    df = pd.DataFrame([_base_row(pub_assist_total=500, pub_assist_or_snap=75)])
+    out = compute_derived_metrics(df)
+    assert out['pct_pub_assist_or_snap'].iloc[0] == 15.0
+
+
+def test_renter_no_vehicle_share():
+    df = pd.DataFrame([_base_row(renter_hh_total=200, renter_hh_no_vehicle=40)])
+    out = compute_derived_metrics(df)
+    assert out['pct_renter_no_vehicle'].iloc[0] == 20.0
+
+
+def test_low_income_share_sums_under_35k_buckets():
+    row = _base_row(
+        inc_dist_total=1000,
+        inc_under_10k=80, inc_10_15k=50, inc_15_20k=70,
+        inc_20_25k=60, inc_25_30k=40, inc_30_35k=50,  # sum = 350
+    )
+    df = pd.DataFrame([row])
+    out = compute_derived_metrics(df)
+    assert out['pct_under_35k'].iloc[0] == 35.0
+
+
+def test_class_metrics_skip_when_universe_columns_missing():
+    # If a universe column is absent (e.g. older vintage), the metric should
+    # simply not be added — not raise.
+    df = pd.DataFrame([_base_row()])  # no class-comp columns
+    out = compute_derived_metrics(df)
+    assert 'pct_foreign_born' not in out.columns
+    assert 'pct_limited_eng_any' not in out.columns
+    assert 'pct_pub_assist_or_snap' not in out.columns
+    assert 'pct_under_35k' not in out.columns
+
+
 # ---------- parse_crosswalk ----------
 
 def _crosswalk_row(geoid_10, geoid_20, area_part, area_total):

@@ -153,6 +153,11 @@ def main():
         'median_year_built',
         # 6: Evictions
         'eviction_rate', 'eviction_filings',
+        # Class composition layer (added 2026-05-03)
+        'pct_foreign_born', 'pct_naturalized', 'pct_noncitizen',
+        'pct_limited_eng_spanish', 'pct_limited_eng_indoeuropean',
+        'pct_limited_eng_apilang', 'pct_limited_eng_other', 'pct_limited_eng_any',
+        'pct_pub_assist_or_snap', 'pct_renter_no_vehicle', 'pct_under_35k',
     ]
     delta_cols = [f'{v}_2010' for v in DELTA_VARS] + [f'{v}_delta_pct' for v in DELTA_VARS]
     keep_cols = base_cols + delta_cols + ['geometry']

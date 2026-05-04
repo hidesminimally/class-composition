@@ -107,6 +107,47 @@ def compute_derived_metrics(df):
             if lang_col in df.columns:
                 df[f'pct_{lang_col}'] = _safe_pct(df[lang_col], df['lang_total'])
 
+    # ---- Class composition derived metrics ----
+
+    # Nativity / citizenship
+    if 'nativity_total' in df.columns:
+        df['pct_foreign_born'] = _safe_pct(df['pop_foreign_born'], df['nativity_total'])
+    if 'citizenship_total' in df.columns:
+        df['pct_naturalized'] = _safe_pct(df['pop_naturalized'], df['citizenship_total'])
+        df['pct_noncitizen'] = _safe_pct(df['pop_noncitizen'], df['citizenship_total'])
+
+    # Limited-English household share, by language family
+    if 'hh_lang_total' in df.columns:
+        for li_col, out_col in [
+            ('hh_limited_eng_spanish', 'pct_limited_eng_spanish'),
+            ('hh_limited_eng_indoeuropean', 'pct_limited_eng_indoeuropean'),
+            ('hh_limited_eng_apilang', 'pct_limited_eng_apilang'),
+            ('hh_limited_eng_other', 'pct_limited_eng_other'),
+        ]:
+            if li_col in df.columns:
+                df[out_col] = _safe_pct(df[li_col], df['hh_lang_total'])
+        # Aggregate across all language families = "any limited-English household"
+        li_cols = [c for c in ['hh_limited_eng_spanish','hh_limited_eng_indoeuropean',
+                               'hh_limited_eng_apilang','hh_limited_eng_other'] if c in df.columns]
+        if li_cols:
+            df['pct_limited_eng_any'] = _safe_pct(df[li_cols].sum(axis=1), df['hh_lang_total'])
+
+    # SNAP / public assistance
+    if 'pub_assist_total' in df.columns:
+        df['pct_pub_assist_or_snap'] = _safe_pct(df['pub_assist_or_snap'], df['pub_assist_total'])
+
+    # Renter household with no vehicle (transit-dependent renter signal)
+    if 'renter_hh_total' in df.columns:
+        df['pct_renter_no_vehicle'] = _safe_pct(df['renter_hh_no_vehicle'], df['renter_hh_total'])
+
+    # Low-income share = households earning < $35k / all households
+    if 'inc_dist_total' in df.columns:
+        low_income_cols = ['inc_under_10k', 'inc_10_15k', 'inc_15_20k',
+                           'inc_20_25k', 'inc_25_30k', 'inc_30_35k']
+        present = [c for c in low_income_cols if c in df.columns]
+        if present:
+            df['pct_under_35k'] = _safe_pct(df[present].sum(axis=1), df['inc_dist_total'])
+
     return df
 
 

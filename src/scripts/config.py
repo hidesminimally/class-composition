@@ -58,6 +58,42 @@ CENSUS_FIELDS = {
     'B25070_008E': 'burden_35_40',
     'B25070_009E': 'burden_40_50',
     'B25070_010E': 'burden_50_plus',
+
+    # ---- Class composition layer (added 2026-05-03) ----
+
+    # Nativity (B05002): foreign-born share of total population
+    'B05002_001E': 'nativity_total',
+    'B05002_013E': 'pop_foreign_born',
+
+    # Citizenship status (B05001): naturalized vs not-a-citizen split
+    'B05001_001E': 'citizenship_total',
+    'B05001_005E': 'pop_naturalized',
+    'B05001_006E': 'pop_noncitizen',
+
+    # Limited English speaking households by language family (C16002)
+    # "Limited English" = no household member 14+ speaks English "very well"
+    'C16002_001E': 'hh_lang_total',
+    'C16002_004E': 'hh_limited_eng_spanish',
+    'C16002_007E': 'hh_limited_eng_indoeuropean',
+    'C16002_010E': 'hh_limited_eng_apilang',  # Asian/Pacific Island languages
+    'C16002_013E': 'hh_limited_eng_other',
+
+    # Public assistance / SNAP (B19058)
+    'B19058_001E': 'pub_assist_total',
+    'B19058_002E': 'pub_assist_or_snap',
+
+    # Tenure by vehicles available (B25044): renter households with no vehicle
+    'B25044_009E': 'renter_hh_total',
+    'B25044_010E': 'renter_hh_no_vehicle',
+
+    # Household income distribution (B19001): low-income tail for class signal
+    'B19001_001E': 'inc_dist_total',
+    'B19001_002E': 'inc_under_10k',
+    'B19001_003E': 'inc_10_15k',
+    'B19001_004E': 'inc_15_20k',
+    'B19001_005E': 'inc_20_25k',
+    'B19001_006E': 'inc_25_30k',
+    'B19001_007E': 'inc_30_35k',
 }
 
 # CPI-U deflator: 2010 → 2020 (BLS CPI-U all-urban, 2010 annual avg → 2020 annual avg)

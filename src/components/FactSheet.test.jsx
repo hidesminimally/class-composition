@@ -87,7 +87,8 @@ describe('FactSheet — tract view', () => {
 
   it('renders top non-English languages sorted descending', () => {
     render(<FactSheet p={tractFull} />);
-    expect(screen.getByText(/Spanish/)).toBeTruthy();
+    // "Spanish" now appears in both LANGUAGE AT HOME and CLASS COMPOSITION sections
+    expect(screen.getAllByText(/Spanish/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Chinese/)).toBeTruthy();
     expect(screen.getByText(/Vietnamese/)).toBeTruthy();
   });
