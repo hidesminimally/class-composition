@@ -121,10 +121,20 @@ function App() {
                   <input type="checkbox" checked={selectedLocals.includes(l)} onChange={() => setSelectedLocals(p => p.includes(l) ? p.filter(x=>x!==l) : [...p,l])} />
                   <span className="local-label-btn" onClick={() => onLocalClick(l)} style={{flex:1}}>{l}</span>
                   <button
-                    title="Open targeting panel"
+                    title="Filter and export this local's tracts (sliders, sort, CSV for blockwalking)"
                     onClick={() => setTargetingLocal(targetingLocal === l ? null : l)}
-                    style={{background:'none', border:'none', cursor:'pointer', fontSize:'1rem', padding:'0 4px', opacity: targetingLocal === l ? 1 : 0.5}}
-                  >🎯</button>
+                    style={{
+                      background: targetingLocal === l ? '#2563eb' : 'transparent',
+                      color: targetingLocal === l ? 'white' : '#2563eb',
+                      border: '1px solid #2563eb',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      marginLeft: 4,
+                    }}
+                  >{targetingLocal === l ? '✓ Tracts' : 'Tracts'}</button>
                 </div>
               ))}
             </div>
