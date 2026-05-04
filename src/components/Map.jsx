@@ -2,7 +2,8 @@ import React, { useMemo, useRef } from 'react';
 import MapGL, { Source, Layer, Popup } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { METRICS, HIGHLIGHT_STYLE } from '../config/metrics';
-import { computeTertiles, BIVARIATE_PALETTE } from '../lib/bivariate';
+import { computeTertiles } from '../lib/bivariate';
+import { buildBivariateFillExpr } from '../lib/bivariatePaint';
 import BivariateLegend from './BivariateLegend';
 
 const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, selectedFeature, onSelect, hoverInfo, allFeatures }, ref) => {
@@ -28,40 +29,12 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
   // Univariate base layer (dimmed when bivariate is active so swatch shows through cleanly)
   const baseLayerStyle = useMemo(() => {
     if (isBivariate) {
-      // In bivariate mode, every tract gets one of 9 colors based on tertile classes.
       const xBreaks = tertileBreaks[baseMetric];
       const yBreaks = tertileBreaks[overlayMetric];
-      // Build a Maplibre `case` expression: classify x→{0,1,2}, classify y→{0,1,2}, look up palette.
-      const xClassExpr = ['case',
-        ['<=', ['coalesce', ['get', baseMetric], -1e9], xBreaks[0]], 0,
-        ['<=', ['coalesce', ['get', baseMetric], -1e9], xBreaks[1]], 1,
-        2,
-      ];
-      const yClassExpr = ['case',
-        ['<=', ['coalesce', ['get', overlayMetric], -1e9], yBreaks[0]], 0,
-        ['<=', ['coalesce', ['get', overlayMetric], -1e9], yBreaks[1]], 1,
-        2,
-      ];
-      // Concat into a 9-key string so we can use `match`.
-      const keyExpr = ['concat', ['to-string', xClassExpr], '-', ['to-string', yClassExpr]];
-      const colorMatch = ['match', keyExpr];
-      for (let y = 0; y <= 2; y++) {
-        for (let x = 0; x <= 2; x++) {
-          colorMatch.push(`${x}-${y}`, BIVARIATE_PALETTE[y][x]);
-        }
-      }
-      colorMatch.push('#eee'); // fallback
-
+      const fillColor = buildBivariateFillExpr(baseMetric, overlayMetric, xBreaks, yBreaks, selectedLocals);
       return {
         id: 'census-base', type: 'fill',
-        paint: {
-          'fill-color': ['case',
-            ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
-            colorMatch,
-            '#eee'
-          ],
-          'fill-opacity': 0.75
-        }
+        paint: { 'fill-color': fillColor, 'fill-opacity': 0.75 }
       };
     }
     // Univariate

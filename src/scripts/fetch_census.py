@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import pandas as pd
 from census import Census
 import config
@@ -67,36 +68,46 @@ def fetch_and_clean_data(vintage="2020"):
     df['id'] = df['tract'].astype(str).str.zfill(6)
 
     print(f"   Fetched {len(df)} tracts. Calculating derived metrics...")
+    df = compute_derived_metrics(df)
 
-    df['pct_white'] = (df['pop_white_non_hisp'] / df['total_pop'] * 100).round(1)
-    df['pct_black'] = (df['pop_black'] / df['total_pop'] * 100).round(1)
-    df['pct_asian'] = (df['pop_asian'] / df['total_pop'] * 100).round(1)
-    df['pct_hispanic'] = (df['pop_hispanic'] / df['total_pop'] * 100).round(1)
+    df.to_csv(output_file, index=False)
+    print(f"Saved fresh Census data to {output_file}")
 
-    df['unemployment'] = (df['unemployed'] / df['labor_force'] * 100).round(1).fillna(0)
-    df['poverty_rate'] = (df['pop_poverty'] / df['pop_poverty_total'] * 100).round(1).fillna(0)
-    df['vacancy_rate'] = (df['housing_units_vacant'] / df['housing_units_total'] * 100).round(1).fillna(0)
+
+def compute_derived_metrics(df):
+    """Pure helper: given a renamed Census DataFrame, return df with derived
+    metrics added. Pulled out for unit-testing without API calls."""
+    df = df.copy()
+
+    def _safe_pct(num, den):
+        return (num / den * 100).replace([np.inf, -np.inf], np.nan).round(1).fillna(0)
+
+    df['pct_white'] = _safe_pct(df['pop_white_non_hisp'], df['total_pop'])
+    df['pct_black'] = _safe_pct(df['pop_black'], df['total_pop'])
+    df['pct_asian'] = _safe_pct(df['pop_asian'], df['total_pop'])
+    df['pct_hispanic'] = _safe_pct(df['pop_hispanic'], df['total_pop'])
+
+    df['unemployment'] = _safe_pct(df['unemployed'], df['labor_force'])
+    df['poverty_rate'] = _safe_pct(df['pop_poverty'], df['pop_poverty_total'])
+    df['vacancy_rate'] = _safe_pct(df['housing_units_vacant'], df['housing_units_total'])
     df['occupancy_rate'] = (100.0 - df['vacancy_rate']).round(1)
 
     burdened_count = df['burden_30_35'] + df['burden_35_40'] + df['burden_40_50'] + df['burden_50_plus']
-    df['rent_burden'] = (burdened_count / df['renter_households_total'] * 100).round(1).fillna(0)
+    df['rent_burden'] = _safe_pct(burdened_count, df['renter_households_total'])
 
-    # Length of residency percentages (renter buckets)
     if 'lor_total' in df.columns:
         for bucket_col in ['lor_2019_or_later', 'lor_2015_2018', 'lor_2010_2014',
                            'lor_2000_2009', 'lor_1990_1999', 'lor_1989_or_earlier']:
             if bucket_col in df.columns:
-                df[f'pct_{bucket_col}'] = (df[bucket_col] / df['lor_total'] * 100).round(1).fillna(0)
+                df[f'pct_{bucket_col}'] = _safe_pct(df[bucket_col], df['lor_total'])
 
-    # Language percentages
     if 'lang_total' in df.columns:
         for lang_col in ['lang_english_only', 'lang_spanish', 'lang_french',
                          'lang_chinese', 'lang_vietnamese', 'lang_tagalog', 'lang_korean']:
             if lang_col in df.columns:
-                df[f'pct_{lang_col}'] = (df[lang_col] / df['lang_total'] * 100).round(1).fillna(0)
+                df[f'pct_{lang_col}'] = _safe_pct(df[lang_col], df['lang_total'])
 
-    df.to_csv(output_file, index=False)
-    print(f"Saved fresh Census data to {output_file}")
+    return df
 
 
 if __name__ == "__main__":
