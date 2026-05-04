@@ -1,11 +1,5 @@
-// 3×3 bivariate palette (Joshua Stevens: bluepink scheme)
-// Index [yClass][xClass] — y=0 (low) at row 0 to keep array literal readable top-down.
-// In practice we render with yClass=0 at the *bottom* of the legend.
-export const BIVARIATE_PALETTE = [
-  ['#e8e8e8', '#b5c0da', '#6c83b5'], // y low  (bottom row in legend)
-  ['#b8d6be', '#90b2b3', '#567994'], // y mid
-  ['#73ae80', '#5a9178', '#2a5a5b'], // y high (top row in legend)
-];
+// Tertile-classification helpers used by the dual-encoding pattern overlay.
+// (Was the home of a 9-color bivariate palette before color+pattern replaced it.)
 
 function quantile(sorted, p) {
   const idx = p * (sorted.length - 1);
@@ -31,9 +25,4 @@ export function classifyTertile(value, breaks) {
   if (value <= t1) return 0;
   if (value <= t2) return 1;
   return 2;
-}
-
-export function bivariateColor(xClass, yClass) {
-  if (xClass === null || yClass === null) return null;
-  return BIVARIATE_PALETTE[yClass][xClass];
 }

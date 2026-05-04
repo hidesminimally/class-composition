@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeTertiles, classifyTertile, bivariateColor, BIVARIATE_PALETTE } from './bivariate';
+import { computeTertiles, classifyTertile } from './bivariate';
 
 describe('computeTertiles', () => {
   it('returns two breakpoints for a sorted set', () => {
@@ -75,15 +75,3 @@ describe('computeTertiles edge cases', () => {
   });
 });
 
-describe('bivariateColor', () => {
-  it('returns the 9-color palette indexed (xClass, yClass)', () => {
-    expect(bivariateColor(0, 0)).toBe(BIVARIATE_PALETTE[0][0]);
-    expect(bivariateColor(2, 2)).toBe(BIVARIATE_PALETTE[2][2]);
-    expect(bivariateColor(1, 0)).toBe(BIVARIATE_PALETTE[0][1]);
-  });
-
-  it('returns null when either class is null', () => {
-    expect(bivariateColor(null, 0)).toBeNull();
-    expect(bivariateColor(0, null)).toBeNull();
-  });
-});
