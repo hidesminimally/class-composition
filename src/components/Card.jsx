@@ -1,31 +1,32 @@
 import React from 'react';
 import { METRICS } from '../config/metrics';
 
-const Card = ({ feature, metric, isPinned, onClick, onFactSheet }) => {
+const Card = React.forwardRef(({ feature, metric, isSelected, onClick, onFactSheet, onDeselect }, ref) => {
   const p = feature?.properties || {};
   const color = METRICS[metric]?.color || '#0f172a';
   const value = p[metric];
   const display = value === null || value === undefined ? '—' : `${value}%`;
 
-  if (isPinned) {
-    return (
-      <div className="stat-card pinned">
-        <div className="pinned-left">
-          <h3>{p.tanc_local}</h3><span>Tract {p.id}</span>
-        </div>
-        <div className="pinned-right">
-          <div className="pinned-metric" style={{color}}>{display}</div>
-          <button className="pinned-btn" onClick={(e) => { e.stopPropagation(); onFactSheet(); }}>Sheet</button>
-          <button onClick={onClick} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#94a3b8'}}>×</button>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="stat-card" onClick={onClick}>
+    <div ref={ref} className={`stat-card${isSelected ? ' selected' : ''}`} onClick={onClick}>
       <div className="card-top">
         <div><div className="card-title">{p.tanc_local}</div><div className="card-sub">Tract {p.id}</div></div>
-        <div className="card-val" style={{color}}>{display}</div>
+        <div style={{display:'flex', alignItems:'center', gap:8}}>
+          <div className="card-val" style={{color}}>{display}</div>
+          {isSelected && (
+            <>
+              <button
+                className="pinned-btn"
+                onClick={(e) => { e.stopPropagation(); onFactSheet?.(); }}
+              >Sheet</button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeselect?.(); }}
+                style={{background:'none', border:'none', fontSize:'1.1rem', cursor:'pointer', color:'#94a3b8', padding:0, lineHeight:1}}
+                aria-label="Deselect"
+              >×</button>
+            </>
+          )}
+        </div>
       </div>
       <div className="card-grid">
         <div><b>{p.total_pop ?? '—'}</b> Pop</div>
@@ -40,6 +41,6 @@ const Card = ({ feature, metric, isPinned, onClick, onFactSheet }) => {
       </div>
     </div>
   );
-};
+});
 
 export default Card;

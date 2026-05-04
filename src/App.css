@@ -78,20 +78,16 @@ html, body, #root {
   cursor: pointer; transition: all 0.1s;
 }
 .stat-card:hover { border-color: #94a3b8; transform: translateY(-1px); }
-
-/* COMPACT PINNED CARD */
-.stat-card.pinned {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #eff6ff; border: 1px solid var(--accent);
-  padding: 8px 12px; cursor: default;
+.stat-card.selected {
+  background: #eff6ff;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
-.pinned-left h3 { margin: 0; font-size: 0.95rem; color: var(--primary); }
-.pinned-left span { font-size: 0.75rem; color: var(--text-muted); }
-.pinned-right { text-align: right; display: flex; gap: 12px; align-items: center; }
-.pinned-metric { font-size: 1.2rem; font-weight: 800; }
-.pinned-btn { 
-  font-size: 0.7rem; background: var(--primary); color: white; 
-  border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; 
+.stat-card.selected:hover { transform: none; }
+
+.pinned-btn {
+  font-size: 0.7rem; background: var(--primary); color: white;
+  border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;
 }
 
 .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

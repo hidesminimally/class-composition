@@ -13,6 +13,7 @@ import { getCentroid } from './lib/targeting';
 
 function App() {
   const mapRef = useRef();
+  const selectedCardRef = useRef(null);
   const [baseMetric, setBaseMetric] = useState('rent_burden');
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -59,6 +60,22 @@ function App() {
     if (!targetingLocal) return [];
     return mapData.filter(f => f.properties.tanc_local === targetingLocal);
   }, [mapData, targetingLocal]);
+
+  // Top 50 by current sort, but force the selected tract into the list so the
+  // user can always see/scroll-to it even if it ranks below 50 on this metric.
+  const visibleFeatures = useMemo(() => {
+    const top = sortedFeatures.slice(0, 50);
+    const selId = selectedFeature?.properties?.id;
+    if (!selId || selId === 'AGGREGATE') return top;
+    if (top.some(f => f.properties.id === selId)) return top;
+    const selInList = sortedFeatures.find(f => f.properties.id === selId);
+    return selInList ? [selInList, ...top] : top;
+  }, [sortedFeatures, selectedFeature]);
+
+  useEffect(() => {
+    if (!selectedFeature || selectedFeature.properties.id === 'AGGREGATE') return;
+    selectedCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedFeature?.properties?.id]);
 
   const onSelect = (f) => {
     setSelectedFeature(f);
@@ -127,7 +144,6 @@ function App() {
         </div>
 
         <div className={`sidebar-right ${activeTab === 'targets' ? 'mobile-active' : ''}`}>
-          {selectedFeature && selectedFeature.properties.id !== 'AGGREGATE' && (<div className="pinned-section"><Card feature={selectedFeature} metric={baseMetric} isPinned={true} onClick={() => onSelect(null)} onFactSheet={() => setShowFactSheet(true)} /></div>)}
           {targetingLocal && (
             <TargetingPanel
               tracts={targetingFeatures}
@@ -137,7 +153,21 @@ function App() {
           )}
           <div className="list-section">
             <div className="right-header"><div>Top Targets</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
-            {sortedFeatures.slice(0, 50).map(f => <Card key={f.properties.id} feature={f} metric={baseMetric} isPinned={false} onClick={() => onSelect(f)} />)}
+            {visibleFeatures.map(f => {
+              const isSel = f.properties.id === selectedFeature?.properties?.id;
+              return (
+                <Card
+                  key={f.properties.id}
+                  ref={isSel ? selectedCardRef : null}
+                  feature={f}
+                  metric={baseMetric}
+                  isSelected={isSel}
+                  onClick={() => onSelect(f)}
+                  onFactSheet={() => setShowFactSheet(true)}
+                  onDeselect={() => onSelect(null)}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
