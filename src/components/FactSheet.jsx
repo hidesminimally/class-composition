@@ -23,9 +23,36 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const Row = ({ label, value, delta = null, deltaSuffix = '%' }) => (
+const SourceLink = ({ table, url, label }) => {
+  if (!table && !url) return null;
+  const href = url || `https://data.census.gov/table?q=${table}`;
+  const tip = url
+    ? `Source: ${label || 'external'} — opens in new tab`
+    : `Source: ACS 5-year, table ${table} — opens data.census.gov in new tab`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={tip}
+      onClick={e => e.stopPropagation()}
+      style={{
+        marginLeft:6, color:'#94a3b8', textDecoration:'none',
+        fontSize:'0.75rem', cursor:'help', verticalAlign:'baseline',
+        borderBottom:'1px dotted #cbd5e1',
+      }}
+    >
+      ⓘ
+    </a>
+  );
+};
+
+const Row = ({ label, value, delta = null, deltaSuffix = '%', table = null, sourceUrl = null, sourceLabel = null }) => (
   <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f1f5f9', alignItems:'baseline'}}>
-    <span style={{color:'#475569'}}>{label}</span>
+    <span style={{color:'#475569'}}>
+      {label}
+      <SourceLink table={table} url={sourceUrl} label={sourceLabel} />
+    </span>
     <span>
       <strong>{value}</strong>
       {delta !== null && <span style={{marginLeft:8, fontSize:'0.85rem'}}><Delta value={delta} suffix={deltaSuffix} /></span>}
@@ -114,35 +141,37 @@ const FactSheet = ({ p }) => {
         {/* LEFT */}
         <div>
           <Section title="POPULATION & HOUSING">
-            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} />
-            <Row label="Avg. household size" value={fmt(p.avg_household_size)} />
-            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} />
-            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} />
-            <Row label="Median year built" value={fmt(p.median_year_built)} />
+            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} table="B01003" />
+            <Row label="Avg. household size" value={fmt(p.avg_household_size)} table="B25010" />
+            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} table="B25064" />
+            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} table="B19013" />
+            <Row label="Median year built" value={fmt(p.median_year_built)} table="B25035" />
           </Section>
 
           <Section title="RISK SIGNALS">
-            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} />
-            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} />
-            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} />
-            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} />
-            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} />
+            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} table="B25070" />
+            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} table="B23025" />
+            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} table="B17001" />
+            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} table="B25002" />
+            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} table="B25002" />
             <Row
               label="Eviction rate (per 1k renters)"
               value={p.eviction_rate !== null && p.eviction_rate !== undefined ? p.eviction_rate.toFixed(1) : '—'}
+              sourceUrl="https://evictionlab.org/map/"
+              sourceLabel="Eviction Lab"
             />
           </Section>
 
           <Section title="CLASS COMPOSITION">
-            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} />
-            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} />
-            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} />
-            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} />
-            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} />
-            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} />
-            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} />
-            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} />
-            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} />
+            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} table="B05002" />
+            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} table="B05002" />
+            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} table="B05002" />
+            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} table="B16002" />
+            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} table="B16002" />
+            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} table="B16002" />
+            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} table="B22010" />
+            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} table="B25044" />
+            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} table="B19001" />
           </Section>
         </div>
 
@@ -155,18 +184,18 @@ const FactSheet = ({ p }) => {
               { label:'Asian', value:p.pct_asian, color:'#9333ea' },
               { label:'White (non-Hisp)', value:p.pct_white, color:'#64748b' },
             ]} />
-            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} />
-            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} />
-            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} />
-            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} />
+            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} table="B03002" />
+            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} table="B03002" />
+            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} table="B03002" />
+            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} table="B03002" />
           </Section>
 
           <Section title="LANGUAGE AT HOME">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12}}>
-              <span style={{color:'#475569'}}>English-only households</span>
+              <span style={{color:'#475569'}}>English-only households<SourceLink table="B16001" /></span>
               <strong style={{fontSize:'1.6rem', color:'#2563eb'}}>{fmt(p.pct_lang_english_only, '%')}</strong>
             </div>
-            <div style={{fontSize:'0.85rem', color:'#475569', marginBottom:6}}>Top non-English languages:</div>
+            <div style={{fontSize:'0.85rem', color:'#475569', marginBottom:6}}>Top non-English languages<SourceLink table="B16001" />:</div>
             {topLangs.length === 0 && <div style={{color:'#94a3b8', fontSize:'0.9rem'}}>—</div>}
             {topLangs.map(l => (
               <div key={l.key} style={{marginBottom:6}}>
@@ -182,7 +211,7 @@ const FactSheet = ({ p }) => {
 
           <Section title="LENGTH OF RESIDENCY">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12}}>
-              <span style={{color:'#475569'}}>Moved in within last ~5 years</span>
+              <span style={{color:'#475569'}}>Moved in within last ~5 years<SourceLink table="B25026" /></span>
               <strong style={{fontSize:'1.4rem', color:'#dc2626'}}>{recentMovers.toFixed(1)}%</strong>
             </div>
             <StackedBar segments={[
@@ -194,7 +223,7 @@ const FactSheet = ({ p }) => {
               { label:'pre-1990', value:p.pct_lor_1989_or_earlier, color:'#0891b2' },
             ]} />
             {RESIDENCY_KEYS.map(r => (
-              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} />
+              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} table="B25026" />
             ))}
           </Section>
         </div>
