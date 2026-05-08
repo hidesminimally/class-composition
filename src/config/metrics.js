@@ -9,12 +9,12 @@ export const METRICS = {
   // Class composition layer (added 2026-05-03)
   pct_foreign_born: { label: "% Foreign-born", color: "#0891b2", max: 75 },
   pct_noncitizen: { label: "% Non-citizen", color: "#0e7490", max: 55 },
-  pct_limited_eng_any: { label: "% Limited-English HH", color: "#7c3aed", max: 40 },
-  pct_limited_eng_spanish: { label: "% Lim-Eng Spanish", color: "#16a34a", max: 25 },
-  pct_limited_eng_apilang: { label: "% Lim-Eng API lang", color: "#9333ea", max: 40 },
-  pct_pub_assist_or_snap: { label: "% on SNAP/Public Assist", color: "#dc2626", max: 40 },
-  pct_renter_no_vehicle: { label: "% Renters w/o Vehicle", color: "#ca8a04", max: 50 },
-  pct_under_35k: { label: "% Households < $35k", color: "#991b1b", max: 65 }
+  pct_limited_eng_any: { label: "% Limited-English Households", color: "#7c3aed", max: 40 },
+  pct_limited_eng_spanish: { label: "% Limited-English Households (Spanish)", color: "#16a34a", max: 25 },
+  pct_limited_eng_apilang: { label: "% Limited-English Households (Asian/Pacific Islander languages)", color: "#9333ea", max: 40 },
+  pct_pub_assist_or_snap: { label: "% on SNAP or Public Assistance", color: "#dc2626", max: 40 },
+  pct_renter_no_vehicle: { label: "% Renter Households without a Vehicle", color: "#ca8a04", max: 50 },
+  pct_under_35k: { label: "% Households Earning Under $35,000", color: "#991b1b", max: 65 }
 };
 
 export const HIGHLIGHT_STYLE = {
