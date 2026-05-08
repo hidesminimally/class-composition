@@ -97,10 +97,16 @@ const FactSheet = ({ p, allFeatures = [] }) => {
   const dataCensusUrl = geoid ? `https://data.census.gov/all?g=1400000US${geoid}` : null;
   const smallBase = !isAgg && typeof p.total_pop === 'number' && p.total_pop > 0 && p.total_pop < 200;
 
-  // Tracts in this local (used for the aggregate mini-map)
+  // Tracts in this local (context for the mini-map in both aggregate and single-tract views)
   const localFeatures = useMemo(
     () => allFeatures.filter(f => f.properties.tanc_local === p.tanc_local && f.geometry),
     [allFeatures, p.tanc_local]
+  );
+
+  // Single-tract feature (used to highlight one tract within its local)
+  const tractFeature = useMemo(
+    () => isAgg ? null : allFeatures.find(f => f.properties.id === p.id && f.geometry),
+    [allFeatures, p.id, isAgg]
   );
 
   // Top 3 non-English languages, sorted by share
@@ -144,6 +150,15 @@ const FactSheet = ({ p, allFeatures = [] }) => {
           contextFeatures={allFeatures}
           color="#dc2626"
           height={220}
+        />
+      )}
+
+      {!isAgg && tractFeature && localFeatures.length > 0 && (
+        <MiniMap
+          highlightFeatures={[tractFeature]}
+          contextFeatures={localFeatures}
+          color="#dc2626"
+          height={180}
         />
       )}
 
