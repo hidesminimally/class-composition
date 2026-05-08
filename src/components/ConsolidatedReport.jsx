@@ -1,7 +1,7 @@
 import React from 'react';
 import FactSheet from './FactSheet';
 
-const ConsolidatedReport = ({ locals, onClose, dataFunc }) => {
+const ConsolidatedReport = ({ locals, onClose, dataFunc, allFeatures = [] }) => {
   const reports = locals.map(local => dataFunc(local)).filter(Boolean);
 
   return (
@@ -13,7 +13,7 @@ const ConsolidatedReport = ({ locals, onClose, dataFunc }) => {
       <div className="report-container">
         {reports.map((stats, i) => (
           <div key={i} className="report-page">
-            <FactSheet p={stats} />
+            <FactSheet p={stats} allFeatures={allFeatures} />
           </div>
         ))}
       </div>

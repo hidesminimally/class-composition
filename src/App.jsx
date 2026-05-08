@@ -93,7 +93,7 @@ function App() {
         <div className="fs-overlay" onClick={() => setShowFactSheet(false)}>
           <div className="fs-paper" onClick={e => e.stopPropagation()}>
             <button className="fs-close" onClick={() => setShowFactSheet(false)}>Close</button>
-            <FactSheet p={selectedFeature.properties} />
+            <FactSheet p={selectedFeature.properties} allFeatures={mapData} />
           </div>
         </div>
       )}
@@ -102,6 +102,7 @@ function App() {
         <ConsolidatedReport
           locals={selectedLocals}
           dataFunc={aggregateFor}
+          allFeatures={mapData}
           onClose={() => setShowConsolidated(false)}
         />
       )}

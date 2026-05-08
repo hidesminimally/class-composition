@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import MiniMap from './MiniMap';
 
 const fmt = (v, suffix = '') => {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
@@ -89,12 +90,18 @@ const RESIDENCY_KEYS = [
   { key: 'pct_lor_1989_or_earlier', label: 'Moved 1989 or earlier' },
 ];
 
-const FactSheet = ({ p }) => {
+const FactSheet = ({ p, allFeatures = [] }) => {
   const isAgg = p.id === 'AGGREGATE';
   const geoid = !isAgg && p.id ? `06001${p.id}` : null;
   const censusReporterUrl = geoid ? `https://censusreporter.org/profiles/14000US${geoid}/` : null;
   const dataCensusUrl = geoid ? `https://data.census.gov/all?g=1400000US${geoid}` : null;
   const smallBase = !isAgg && typeof p.total_pop === 'number' && p.total_pop > 0 && p.total_pop < 200;
+
+  // Tracts in this local (used for the aggregate mini-map)
+  const localFeatures = useMemo(
+    () => allFeatures.filter(f => f.properties.tanc_local === p.tanc_local && f.geometry),
+    [allFeatures, p.tanc_local]
+  );
 
   // Top 3 non-English languages, sorted by share
   const topLangs = LANG_KEYS
@@ -130,6 +137,15 @@ const FactSheet = ({ p }) => {
           </div>
         )}
       </div>
+
+      {isAgg && localFeatures.length > 0 && (
+        <MiniMap
+          highlightFeatures={localFeatures}
+          contextFeatures={allFeatures}
+          color="#dc2626"
+          height={220}
+        />
+      )}
 
       {smallBase && (
         <div style={{background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:4, padding:'8px 12px', marginBottom:16, fontSize:'0.8rem', color:'#78350f'}}>
