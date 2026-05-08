@@ -43,14 +43,19 @@ CENSUS_FIELDS = {
     'B25026_014E': 'lor_1989_or_earlier',
 
     # Linguistic Composition (Language Spoken at Home, pop 5+)
-    'B16001_001E': 'lang_total',
-    'B16001_002E': 'lang_english_only',
-    'B16001_003E': 'lang_spanish',
-    'B16001_006E': 'lang_french',
-    'B16001_075E': 'lang_chinese',
-    'B16001_087E': 'lang_vietnamese',
-    'B16001_069E': 'lang_tagalog',
-    'B16001_063E': 'lang_korean',
+    # Use C16001 (collapsed ~38-language table) — the detailed B16001 table is
+    # NOT published at tract level for ACS 2018-2022 (Census suppression),
+    # which silently produced all-zero pct_lang_* in the geojson. C16001
+    # IS published at tract level and covers the same top languages.
+    # Note: C16001_006E covers "French, Haitian, or Cajun" (not pure French).
+    'C16001_001E': 'lang_total',
+    'C16001_002E': 'lang_english_only',
+    'C16001_003E': 'lang_spanish',
+    'C16001_006E': 'lang_french',
+    'C16001_021E': 'lang_chinese',
+    'C16001_024E': 'lang_vietnamese',
+    'C16001_027E': 'lang_tagalog',
+    'C16001_018E': 'lang_korean',
     
     # Rent Burden (Gross Rent as % of Income)
     'B25070_001E': 'renter_households_total',

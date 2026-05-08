@@ -16,7 +16,7 @@ VINTAGE_YEAR_MAP = {
 # Variables that may not be available in older vintages — degrade gracefully.
 # Class-composition layer (B05*/C16002/B19058/B25044/B19001) was only needed for
 # 2020 (current snapshot), so dropping it from 2010 is intentional.
-GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_', 'B05001_', 'B05002_',
+GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_', 'C16001_', 'B05001_', 'B05002_',
                              'C16002_', 'B19058_', 'B25044_', 'B19001_']
 
 # Census API "annotation" sentinels meaning "data not available / suppressed".
@@ -75,11 +75,14 @@ def fetch_and_clean_data(vintage="2020"):
             Census.ALL
         )
     except Exception as e:
-        # Graceful degrade: drop B25026 and B16001 variables and retry
+        # Graceful degrade: drop variables not available in this vintage and retry.
+        # This handles C16001 missing in older vintages (introduced ~2016) and
+        # the class-composition layer (B05*/C16002/B19058/B25044/B19001) which
+        # is only needed for the 2020 snapshot.
         dropped = [k for k in fields if any(k.startswith(p) for p in GRACEFUL_DEGRADE_PREFIXES)]
         if dropped:
             print(f"WARNING: Census API rejected full field set for vintage {vintage}: {e}")
-            print(f"         Dropping {len(dropped)} variables (B25026/B16001) and retrying...")
+            print(f"         Dropping {len(dropped)} unavailable variables and retrying...")
             for k in dropped:
                 del fields[k]
             try:
