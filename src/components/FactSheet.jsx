@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import MiniMap from './MiniMap';
+import CommentChip from './CommentChip';
 
 // Per-metric metadata: definition, organizing relevance, and source.
 // These power the InfoPopover next to each row label.
@@ -127,8 +128,8 @@ const META = {
   },
   pct_lang_english_only: {
     table: 'C16001',
-    what: 'Households where only English is spoken at home.',
-    why: 'Inverse of multilingual outreach need. Low values = more language access required for any organizing campaign.',
+    what: 'Households that speak a language other than English at home (100% minus English-only).',
+    why: 'Direct measure of multilingual outreach need. High values = more language access required for any organizing campaign.',
   },
   pct_lor: {
     table: 'B25026',
@@ -329,12 +330,24 @@ const Row = ({ label, value, delta = null, deltaSuffix = '%', metaKey = null,
 );
 
 const StackedBar = ({ segments }) => {
-  // segments: [{label, value, color}] — value is a percentage
+  // segments: [{label, value, color}] — value is a percentage. Inline legend
+  // below the bar so the color→label mapping is visible without hovering.
+  const visible = segments.filter(s => s.value > 0);
   return (
-    <div style={{display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid #e2e8f0', marginBottom:8}}>
-      {segments.map((s, i) => s.value > 0 && (
-        <div key={i} title={`${s.label}: ${s.value}%`} style={{width:`${s.value}%`, background:s.color}} />
-      ))}
+    <div style={{marginBottom:12}}>
+      <div style={{display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid #e2e8f0'}}>
+        {visible.map((s, i) => (
+          <div key={i} title={`${s.label}: ${s.value}%`} style={{width:`${s.value}%`, background:s.color}} />
+        ))}
+      </div>
+      <div style={{display:'flex', flexWrap:'wrap', gap:'6px 14px', marginTop:8, fontSize:'0.72rem', color:'#475569'}}>
+        {visible.map((s, i) => (
+          <div key={i} style={{display:'flex', alignItems:'center', gap:5}}>
+            <span style={{width:10, height:10, borderRadius:2, background:s.color, display:'inline-block'}} />
+            <span><strong style={{color:'#0f172a'}}>{s.label}</strong> {s.value}%</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -357,7 +370,7 @@ const RESIDENCY_KEYS = [
   { key: 'pct_lor_1989_or_earlier', label: 'Moved 1989 or earlier' },
 ];
 
-const FactSheet = ({ p, allFeatures = [] }) => {
+const FactSheet = ({ p, allFeatures = [], onOpenNotes }) => {
   const isAgg = p.id === 'AGGREGATE';
   const geoid = !isAgg && p.id ? `06001${p.id}` : null;
   const censusReporterUrl = geoid ? `https://censusreporter.org/profiles/14000US${geoid}/` : null;
@@ -376,15 +389,20 @@ const FactSheet = ({ p, allFeatures = [] }) => {
     [allFeatures, p.id, isAgg]
   );
 
-  // Top 3 non-English languages, sorted by share
+  // All non-English languages we have data for, sorted by share, hiding zeros
   const topLangs = LANG_KEYS
     .map(l => ({ ...l, value: p[l.key] || 0 }))
     .filter(l => l.value > 0)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 3);
+    .sort((a, b) => b.value - a.value);
 
   // Recent-mover headline = sum of 2015+ buckets
   const recentMovers = (p.pct_lor_2019_or_later || 0) + (p.pct_lor_2015_2018 || 0);
+
+  // B03002 race fields are mutually-exclusive, so the residual = Native American +
+  // NHPI + Other + Two-or-more (non-Hispanic). Clamped to [0, 100] for rounding noise.
+  const otherRaceShare = Math.max(0, Math.min(100,
+    100 - ((p.pct_white || 0) + (p.pct_black || 0) + (p.pct_asian || 0) + (p.pct_hispanic || 0))
+  ));
 
   return (
     <div style={{height:'100%', display:'flex', flexDirection:'column', overflow:'auto'}}>
@@ -393,8 +411,22 @@ const FactSheet = ({ p, allFeatures = [] }) => {
           <h1 style={{fontSize:'2.2rem', fontWeight:800, margin:0, lineHeight:1}}>
             {isAgg ? `${p.tanc_local} Local` : `Tract ${p.id}`}
           </h1>
-          <div style={{color:'#64748b', marginTop:5, fontSize:'1rem'}}>
-            {isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter${geoid ? ` · GEOID ${geoid}` : ''}`}
+          <div style={{color:'#64748b', marginTop:5, fontSize:'1rem', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+            <span>{isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter${geoid ? ` · GEOID ${geoid}` : ''}`}</span>
+            {onOpenNotes && (isAgg
+              ? <CommentChip
+                  scope="local"
+                  scopeId={p.tanc_local}
+                  alwaysShow
+                  onOpen={() => onOpenNotes({ scope: 'local', scopeId: String(p.tanc_local), scopeLabel: String(p.tanc_local) })}
+                />
+              : <CommentChip
+                  scope="tract"
+                  scopeId={p.id}
+                  alwaysShow
+                  onOpen={() => onOpenNotes({ scope: 'tract', scopeId: String(p.id), scopeLabel: String(p.id) })}
+                />
+            )}
           </div>
         </div>
         {censusReporterUrl && (
@@ -493,6 +525,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
               { label:'Hispanic', value:p.pct_hispanic, color:'#16a34a' },
               { label:'Asian', value:p.pct_asian, color:'#9333ea' },
               { label:'White (non-Hisp)', value:p.pct_white, color:'#64748b' },
+              { label:'Other / Multiracial', value: otherRaceShare, color:'#94a3b8' },
             ]} />
             <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} metaKey="pct_black"
                  geoid={geoid} currentRaw={p.pct_black} priorRaw={p.pct_black_2010} fmtKind="pct" />
@@ -502,12 +535,15 @@ const FactSheet = ({ p, allFeatures = [] }) => {
                  geoid={geoid} currentRaw={p.pct_asian} priorRaw={p.pct_asian_2010} fmtKind="pct" />
             <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} metaKey="pct_white"
                  geoid={geoid} currentRaw={p.pct_white} priorRaw={p.pct_white_2010} fmtKind="pct" />
+            <Row label="Other / Multiracial" value={fmt(otherRaceShare, '%')} />
           </Section>
 
           <Section title="LANGUAGE AT HOME">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12}}>
-              <span style={{color:'#475569'}}>English-only households<InfoPopover meta={META.pct_lang_english_only} /></span>
-              <strong style={{fontSize:'1.6rem', color:'#2563eb'}}>{fmt(p.pct_lang_english_only, '%')}</strong>
+              <span style={{color:'#475569'}}>Non-English-speaking households<InfoPopover meta={META.pct_lang_english_only} /></span>
+              <strong style={{fontSize:'1.6rem', color:'#2563eb'}}>
+                {p.pct_lang_english_only == null ? '—' : `${(100 - p.pct_lang_english_only).toFixed(1)}%`}
+              </strong>
             </div>
             <div style={{fontSize:'0.85rem', color:'#475569', marginBottom:6}}>Top non-English languages<InfoPopover meta={META.pct_lang_english_only} />:</div>
             {topLangs.length === 0 && <div style={{color:'#94a3b8', fontSize:'0.9rem'}}>—</div>}

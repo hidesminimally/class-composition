@@ -1,5 +1,6 @@
 import React from 'react';
 import { METRICS } from '../config/metrics';
+import CommentChip from './CommentChip';
 
 const fmtMetric = (val, meta) => {
   if (val === null || val === undefined || Number.isNaN(val)) return '—';
@@ -17,15 +18,15 @@ const deltaColor = (val) => {
   return 'var(--text)';
 };
 
-const Card = React.forwardRef(({ feature, metric, overlayMetric, isSelected, onClick, onFactSheet, onDeselect }, ref) => {
+const Card = React.forwardRef(({ feature, metric, overlayMetric, isSelected, onClick, onFactSheet, onDeselect, onOpenNotes }, ref) => {
   const p = feature?.properties || {};
   const baseMeta = METRICS[metric];
   const overlayMeta = overlayMetric && overlayMetric !== 'none' && overlayMetric !== metric
     ? METRICS[overlayMetric]
     : null;
 
-  const baseColor = baseMeta?.color || (baseMeta?.kind === 'diverging' ? '#0f172a' : '#0f172a');
   const headlineDisplay = fmtMetric(p[metric], baseMeta);
+  const headlineLabel = baseMeta?.short || baseMeta?.label || metric;
 
   const cells = [
     { label: 'Pop', value: p.total_pop ?? '—', valueStyle: {} },
@@ -43,14 +44,32 @@ const Card = React.forwardRef(({ feature, metric, overlayMetric, isSelected, onC
     });
   }
 
-  const headlineColor = baseMeta?.kind === 'diverging' ? deltaColor(p[metric]) : baseColor;
+  // Diverging metrics keep their red/blue arrow color (the color carries the
+  // sign info). Sequential metrics use neutral primary so the value doesn't
+  // collide with the race-color palette in the mini-bar.
+  const headlineColor = baseMeta?.kind === 'diverging' ? deltaColor(p[metric]) : 'var(--primary)';
 
   return (
     <div ref={ref} className={`stat-card${isSelected ? ' selected' : ''}`} onClick={onClick}>
       <div className="card-top">
-        <div><div className="card-title">{p.tanc_local}</div><div className="card-sub">Tract {p.id}</div></div>
+        <div>
+          <div className="card-title">{p.tanc_local}</div>
+          <div className="card-sub" style={{display:'flex', alignItems:'center', gap:6}}>
+            <span>Tract {p.id}</span>
+            {p.id && p.id !== 'AGGREGATE' && onOpenNotes && (
+              <CommentChip
+                scope="tract"
+                scopeId={p.id}
+                onOpen={() => onOpenNotes({ scope: 'tract', scopeId: String(p.id), scopeLabel: String(p.id) })}
+              />
+            )}
+          </div>
+        </div>
         <div style={{display:'flex', alignItems:'center', gap:8}}>
-          <div className="card-val" style={{color: headlineColor}}>{headlineDisplay}</div>
+          <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', lineHeight:1}}>
+            <div className="card-val" style={{color: headlineColor}}>{headlineDisplay}</div>
+            <div style={{fontSize:'0.65rem', fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', marginTop:2}}>{headlineLabel}</div>
+          </div>
           {isSelected && (
             <>
               <button

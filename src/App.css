@@ -129,8 +129,56 @@ html, body, #root {
   display: flex; justify-content: space-between; align-items: center;
   cursor: pointer; border-bottom: 1px solid var(--border);
   font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+  user-select: none;
 }
-.table-content { flex: 1; overflow: auto; }
+.table-header:hover { background: #f1f5f9; }
+.table-header-title { display: flex; align-items: center; gap: 8px; }
+.table-chevron {
+  display: inline-block; width: 12px; text-align: center;
+  color: var(--text); font-size: 0.85rem;
+}
+.table-header-actions { display: flex; align-items: center; gap: 12px; }
+.table-row-count { font-weight: 500; color: #94a3b8; }
+.table-toggle-label {
+  background: var(--primary); color: white;
+  padding: 3px 8px; border-radius: 4px;
+  font-size: 0.65rem; letter-spacing: 0.04em;
+}
+
+.table-scroll-controls { display: flex; gap: 4px; }
+.table-scroll-btn {
+  width: 24px; height: 24px;
+  background: white; border: 1px solid var(--border);
+  border-radius: 4px; cursor: pointer;
+  font-size: 0.85rem; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; line-height: 1;
+}
+.table-scroll-btn:hover:not(:disabled) {
+  background: #f1f5f9; border-color: #94a3b8;
+}
+.table-scroll-btn:disabled {
+  opacity: 0.3; cursor: not-allowed;
+}
+
+.table-content { flex: 1; overflow: auto; position: relative; }
+/* Edge fades cue that more columns exist off-screen. Pinned to the scroll
+   container so they shift with the visible viewport, not the table width. */
+.table-content::before, .table-content::after {
+  content: ''; position: sticky; top: 0; height: 100%;
+  width: 24px; pointer-events: none; z-index: 4;
+  opacity: 0; transition: opacity 0.15s;
+}
+.table-content::before {
+  left: 0; float: left; margin-right: -24px;
+  background: linear-gradient(to right, rgba(15,23,42,0.08), transparent);
+}
+.table-content::after {
+  right: 0; float: right; margin-left: -24px;
+  background: linear-gradient(to left, rgba(15,23,42,0.08), transparent);
+}
+.table-content.fade-left::before { opacity: 1; }
+.table-content.fade-right::after { opacity: 1; }
 table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 th { position: sticky; top: 0; background: #f1f5f9; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; }
 td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
@@ -207,7 +255,21 @@ table.data-grid tr:hover .sticky-col { background: #f8fafc; }
   
   .fs-paper { padding: 20px; height: 100%; border-radius: 0; }
   .fs-grid { grid-template-columns: 1fr; gap: 20px; }
+
+  /* Comments drawer goes full-width on mobile (overrides inline width). */
+  .comments-drawer { width: 100vw !important; }
+  /* Granular view's left controls collapse to a top bar on mobile. */
+  .granular-controls {
+    width: 100% !important; min-width: 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    max-height: 40vh;
+  }
 }
+
+/* Comment chip + drawer affordances. */
+.comment-chip:hover { filter: brightness(0.97); }
+.comment-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* --- CONSOLIDATED REPORT --- */
 .report-modal {

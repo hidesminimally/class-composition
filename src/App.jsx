@@ -9,6 +9,8 @@ import TancMap from './components/Map';
 import TargetingPanel from './components/TargetingPanel';
 import VersionBadge from './components/VersionBadge';
 import Landing from './components/Landing';
+import GranularMap from './components/GranularMap';
+import CommentsDrawer from './components/CommentsDrawer';
 import { calculateAggregate } from './lib/aggregate';
 import { sortFeatures, filterByLocals } from './lib/sort';
 import { getCentroid } from './lib/targeting';
@@ -16,7 +18,15 @@ import { getCentroid } from './lib/targeting';
 function App() {
   const mapRef = useRef();
   const selectedCardRef = useRef(null);
-  const [view, setView] = useState('landing'); // 'landing' | 'map'
+  // 'granular' is the new building-level complaint map (Oakland habitability +
+  // 311 housing). Lives next to 'landing' and 'map' as a third top-level view.
+  const [view, setView] = useState('landing'); // 'landing' | 'map' | 'granular'
+
+  // Comments drawer state — single instance, shared across surfaces.
+  // Card / FactSheet / DataTable / GranularMap popup all open it via setNotesTarget.
+  const [notesTarget, setNotesTarget] = useState(null); // { scope, scopeId, scopeLabel } | null
+  const openNotes = (t) => setNotesTarget(t);
+  const closeNotes = () => setNotesTarget(null);
   const [baseMetric, setBaseMetric] = useState('rent_burden');
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -51,7 +61,7 @@ function App() {
     }
   };
 
-  // Features (with geometry preserved) for the Top Targets list,
+  // Features (with geometry preserved) for the Sorted Tracts list,
   // DataTable, and any other consumer that needs to flyTo on click.
   const sortedFeatures = useMemo(
     () => sortFeatures(filterByLocals(mapData, selectedLocals), sortKey, sortAsc),
@@ -105,7 +115,7 @@ function App() {
         <div className="fs-overlay" onClick={() => setShowFactSheet(false)}>
           <div className="fs-paper" onClick={e => e.stopPropagation()}>
             <button className="fs-close" onClick={() => setShowFactSheet(false)}>Close</button>
-            <FactSheet p={selectedFeature.properties} allFeatures={mapData} />
+            <FactSheet p={selectedFeature.properties} allFeatures={mapData} onOpenNotes={openNotes} />
           </div>
         </div>
       )}
@@ -128,6 +138,10 @@ function App() {
           className={`view-tab ${view === 'map' ? 'active' : ''}`}
           onClick={() => setView('map')}
         >TANC Map</button>
+        <button
+          className={`view-tab ${view === 'granular' ? 'active' : ''}`}
+          onClick={() => setView('granular')}
+        >Granular</button>
       </div>
 
       {view === 'landing' && (
@@ -209,7 +223,7 @@ function App() {
             />
           )}
           <div className="list-section">
-            <div className="right-header"><div>Top Targets</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
+            <div className="right-header"><div>Sorted Tracts</div><div className="bar-legend"><div className="legend-item"><div className="legend-dot" style={{background:'#ea580c'}}/>Blk</div><div className="legend-item"><div className="legend-dot" style={{background:'#16a34a'}}/>Hisp</div><div className="legend-item"><div className="legend-dot" style={{background:'#9333ea'}}/>Asn</div></div></div>
             {visibleFeatures.map(f => {
               const isSel = f.properties.id === selectedFeature?.properties?.id;
               return (
@@ -223,6 +237,7 @@ function App() {
                   onClick={() => onSelect(f)}
                   onFactSheet={() => setShowFactSheet(true)}
                   onDeselect={() => onSelect(null)}
+                  onOpenNotes={openNotes}
                 />
               );
             })}
@@ -242,9 +257,24 @@ function App() {
         selectedId={selectedFeature?.properties.id}
         onSelect={onSelect}
         mobileActive={activeTab === 'table'}
+        onOpenNotes={openNotes}
       />
       </>
       )}
+
+      {view === 'granular' && (
+        <div className="middle-section">
+          <GranularMap onOpenNotes={openNotes} />
+        </div>
+      )}
+
+      <CommentsDrawer
+        isOpen={!!notesTarget}
+        scope={notesTarget?.scope}
+        scopeId={notesTarget?.scopeId}
+        scopeLabel={notesTarget?.scopeLabel}
+        onClose={closeNotes}
+      />
 
       <VersionBadge />
     </div>
