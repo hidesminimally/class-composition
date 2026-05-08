@@ -32,5 +32,6 @@ scripts/config.py
 # Ignore Python cache and data files
 __pycache__/
 *.csv
-*.geojsonsrc/scripts/tab20_tract20_tract10_st06.txt
+*.geojson
+src/scripts/tab20_tract20_tract10_st06.txt
 src/scripts/tanc_map_data.geojson

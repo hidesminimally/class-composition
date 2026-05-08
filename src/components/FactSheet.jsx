@@ -126,7 +126,7 @@ const META = {
     why: 'Trajectory matters more than the level — large White-share growth since 2010 is a classic gentrification fingerprint.',
   },
   pct_lang_english_only: {
-    table: 'B16001',
+    table: 'C16001',
     what: 'Households where only English is spoken at home.',
     why: 'Inverse of multilingual outreach need. Low values = more language access required for any organizing campaign.',
   },
@@ -455,12 +455,21 @@ const FactSheet = ({ p, allFeatures = [] }) => {
             <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} metaKey="poverty_rate" geoid={geoid} />
             <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} metaKey="vacancy_rate" geoid={geoid} />
             <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} metaKey="occupancy_rate" geoid={geoid} />
-            <Row
-              label="Eviction rate (per 1k renters)"
-              value={p.eviction_rate !== null && p.eviction_rate !== undefined ? p.eviction_rate.toFixed(1) : '—'}
-              metaKey="eviction_rate"
-              geoid={geoid}
-            />
+            {(p.eviction_rate !== null && p.eviction_rate !== undefined) ? (
+              <Row
+                label="Eviction rate (per 1k renters)"
+                value={p.eviction_rate.toFixed(1)}
+                metaKey="eviction_rate"
+                geoid={geoid}
+              />
+            ) : (
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'6px 0', fontSize:'0.85rem', color:'#94a3b8', borderBottom:'1px solid #f1f5f9'}}>
+                <span>Eviction rate<InfoPopover meta={META.eviction_rate} /></span>
+                <span style={{fontStyle:'italic', fontSize:'0.75rem', maxWidth:220, textAlign:'right', lineHeight:1.3}}>
+                  Eviction Lab data is sparse for Alameda — most tracts not covered.
+                </span>
+              </div>
+            )}
           </Section>
 
           <Section title="SOCIAL COMPOSITION">
@@ -557,7 +566,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
           <a href="https://data.census.gov/table?q=B19001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B19001</a> income brackets ·{' '}
           <a href="https://data.census.gov/table?q=B25034" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25034</a> year built ·{' '}
           <a href="https://data.census.gov/table?q=B25026" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25026</a> length of residency ·{' '}
-          <a href="https://data.census.gov/table?q=B16001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B16001</a> language at home.
+          <a href="https://data.census.gov/table?q=C16001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>C16001</a> language at home.
         </div>
         <div style={{textAlign:'center', color:'#94a3b8', marginTop:8}}>
           TANC Internal Document • Generated {new Date().toLocaleDateString()}
