@@ -5,7 +5,7 @@ const DataTable = ({ features, isExpanded, onToggleExpanded, sortKey, sortAsc, o
 
   useEffect(() => {
     if (!selectedId || selectedId === 'AGGREGATE' || !isExpanded) return;
-    selectedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    selectedRowRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
   }, [selectedId, isExpanded]);
 
   const getSortIcon = (key) =>

@@ -8,6 +8,7 @@ import DataTable from './components/DataTable';
 import TancMap from './components/Map';
 import TargetingPanel from './components/TargetingPanel';
 import VersionBadge from './components/VersionBadge';
+import Landing from './components/Landing';
 import { calculateAggregate } from './lib/aggregate';
 import { sortFeatures, filterByLocals } from './lib/sort';
 import { getCentroid } from './lib/targeting';
@@ -15,6 +16,7 @@ import { getCentroid } from './lib/targeting';
 function App() {
   const mapRef = useRef();
   const selectedCardRef = useRef(null);
+  const [view, setView] = useState('landing'); // 'landing' | 'map'
   const [baseMetric, setBaseMetric] = useState('rent_burden');
   const [overlayMetric, setOverlayMetric] = useState('none');
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -79,6 +81,15 @@ function App() {
     selectedCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [selectedFeature?.properties?.id]);
 
+  // Defensive: pattern density can't encode signed change, so a diverging metric
+  // in the overlay slot is meaningless. The dropdown filters them out, but if a
+  // user lands here from a stale URL/state, clear it.
+  useEffect(() => {
+    if (overlayMetric !== 'none' && METRICS[overlayMetric]?.kind === 'diverging') {
+      setOverlayMetric('none');
+    }
+  }, [overlayMetric]);
+
   const onSelect = (f) => {
     setSelectedFeature(f);
     if (f && f.geometry) {
@@ -107,11 +118,44 @@ function App() {
           onClose={() => setShowConsolidated(false)}
         />
       )}
+
+      <div className="view-switch">
+        <button
+          className={`view-tab ${view === 'landing' ? 'active' : ''}`}
+          onClick={() => setView('landing')}
+        >Locals overview</button>
+        <button
+          className={`view-tab ${view === 'map' ? 'active' : ''}`}
+          onClick={() => setView('map')}
+        >TANC Map</button>
+      </div>
+
+      {view === 'landing' && (
+        <Landing
+          features={mapData}
+          allLocals={allLocals}
+          aggregateFor={aggregateFor}
+          onOpenLocal={(localName) => {
+            const aggStats = aggregateFor(localName);
+            if (aggStats) {
+              setSelectedFeature({ properties: aggStats, geometry: null });
+              setShowFactSheet(true);
+            }
+          }}
+          onDrillToMap={(localName) => {
+            setSelectedLocals([localName]);
+            setView('map');
+          }}
+        />
+      )}
+
+      {view === 'map' && (
+      <>
       <div className="middle-section">
         <div className={`sidebar-left ${activeTab === 'controls' ? 'mobile-active' : ''}`}>
           <h1 className="app-header">TANC Map</h1>
           <div className="control-group"><span className="label-header">Metric</span><div className="select-wrapper"><select className="select-input" value={baseMetric} onChange={e => setBaseMetric(e.target.value)}>{Object.entries(METRICS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
-          <div className="control-group"><span className="label-header">Second Metric (overlay pattern)</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None (color only) --</option>{Object.entries(METRICS).filter(([k]) => k !== baseMetric).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div></div>
+          <div className="control-group"><span className="label-header">Second Metric (overlay pattern)</span><div className="select-wrapper"><select className="select-input" value={overlayMetric} onChange={e => setOverlayMetric(e.target.value)}><option value="none">-- None (color only) --</option>{Object.entries(METRICS).filter(([k,v]) => k !== baseMetric && v.kind !== 'diverging').map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}</select></div><div style={{fontSize:'0.65rem', color:'#94a3b8', marginTop:4, lineHeight:1.4}}>Pattern density shows magnitude only. Diverging metrics (signed change) belong in the color slot above.</div></div>
           <div className="control-group">
             <span className="label-header">Locals</span>
             <button onClick={() => setShowConsolidated(true)} style={{width:'100%',padding:'10px',marginBottom:'12px',background:'#2563eb',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:'bold',fontSize:'0.8rem'}}>
@@ -174,6 +218,7 @@ function App() {
                   ref={isSel ? selectedCardRef : null}
                   feature={f}
                   metric={baseMetric}
+                  overlayMetric={overlayMetric}
                   isSelected={isSel}
                   onClick={() => onSelect(f)}
                   onFactSheet={() => setShowFactSheet(true)}
@@ -198,6 +243,8 @@ function App() {
         onSelect={onSelect}
         mobileActive={activeTab === 'table'}
       />
+      </>
+      )}
 
       <VersionBadge />
     </div>
