@@ -39,16 +39,27 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
     }
   }, []);
 
-  const baseLayerStyle = useMemo(() => ({
-    id: 'census-base', type: 'fill',
-    paint: {
-      'fill-color': ['case',
-        ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
-        ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color],
-        '#eee'],
-      'fill-opacity': 0.6,
-    },
-  }), [baseMetric, selectedLocals]);
+  const baseLayerStyle = useMemo(() => {
+    const m = METRICS[baseMetric];
+    // Diverging: blue→neutral→red across [low, 0, high]; null treated as 0 (no change).
+    // Sequential: cream→accent across [0, max]; legacy behavior, null falls to lowest.
+    const fillExpr = m.kind === 'diverging'
+      ? ['interpolate', ['linear'], ['coalesce', ['to-number', ['get', baseMetric]], 0],
+          m.domain[0], m.colors[0],
+          m.domain[1], m.colors[1],
+          m.domain[2], m.colors[2]]
+      : ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', m.max, m.color];
+    return {
+      id: 'census-base', type: 'fill',
+      paint: {
+        'fill-color': ['case',
+          ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
+          fillExpr,
+          '#eee'],
+        'fill-opacity': 0.6,
+      },
+    };
+  }, [baseMetric, selectedLocals]);
 
   const patternLayerStyle = useMemo(() => {
     if (!isDual) return null;

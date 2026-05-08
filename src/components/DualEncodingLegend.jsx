@@ -8,8 +8,15 @@ import { hatchSvgDataUri } from '../lib/hatch';
 const DualEncodingLegend = ({ xMetric, yMetric }) => {
   if (!xMetric || !yMetric || xMetric === 'none' || yMetric === 'none') return null;
 
-  const baseColor = METRICS[xMetric]?.color || '#0f172a';
-  const colorStops = ['#fff7ec', baseColor];
+  const xMeta = METRICS[xMetric];
+  const isDiverging = xMeta?.kind === 'diverging';
+  const baseColor = xMeta?.color || '#0f172a';
+  const colorGradient = isDiverging
+    ? `linear-gradient(to right, ${xMeta.colors[0]}, ${xMeta.colors[1]}, ${xMeta.colors[2]})`
+    : `linear-gradient(to right, #fff7ec, ${baseColor})`;
+  const colorLabels = isDiverging
+    ? [`${xMeta.domain[0]}%`, '0', `${xMeta.domain[2]}%+`]
+    : ['low', null, 'high'];
   const patternRow = [
     { label: 'low', density: null },
     { label: 'mid', density: 'hatch-mid' },
@@ -35,11 +42,13 @@ const DualEncodingLegend = ({ xMetric, yMetric }) => {
         </div>
         <div style={{
           height: cellH,
-          background: `linear-gradient(to right, ${colorStops[0]}, ${colorStops[1]})`,
+          background: colorGradient,
           border: '1px solid #cbd5e1', borderRadius: 2,
         }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#64748b', marginTop: 2 }}>
-          <span>low</span><span>high</span>
+          <span>{colorLabels[0]}</span>
+          {colorLabels[1] !== null && <span>{colorLabels[1]}</span>}
+          <span>{colorLabels[2]}</span>
         </div>
       </div>
 
