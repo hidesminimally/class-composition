@@ -1,5 +1,231 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import MiniMap from './MiniMap';
+
+// Per-metric metadata: definition, organizing relevance, and source.
+// These power the InfoPopover next to each row label.
+const META = {
+  total_pop: {
+    table: 'B01003',
+    what: 'Total people counted in this Census tract.',
+    why: 'Anchors per-capita metrics. Big drops since 2010 often indicate displacement; big gains usually mean new housing or gentrification pressure.',
+  },
+  avg_household_size: {
+    table: 'B25010',
+    what: 'Mean number of people per occupied housing unit.',
+    why: 'Larger households often mean children, multigenerational families, and overcrowding — strong reasons to organize against rent hikes.',
+  },
+  median_gross_rent: {
+    table: 'B25064',
+    what: 'Median monthly rent paid by renter households (rent + utilities).',
+    why: 'The central organizing fact. Compare its trajectory to wage growth — the gap is your displacement story.',
+  },
+  median_hh_income: {
+    table: 'B19013',
+    what: 'Median annual income across all households in the tract.',
+    why: 'Sets the realistic ceiling on what tenants can pay. Income stagnation alongside rising rent = mounting burden.',
+  },
+  median_year_built: {
+    table: 'B25035',
+    what: 'Median year housing units in this tract were built.',
+    why: 'Older buildings are more often rent-stabilized under local ordinances. Newer (post-1995 in CA) is typically unregulated, market-rate.',
+  },
+  rent_burden: {
+    table: 'B25070',
+    what: 'Share of renter households paying ≥30% of income on gross rent.',
+    why: 'HUD\'s definition of "rent-burdened." High values flag eviction risk and households most likely to be receptive to tenant organizing.',
+  },
+  unemployment: {
+    table: 'B23025',
+    what: 'Civilian labor force not employed (and looking) ÷ civilian labor force, age 16+.',
+    why: 'Joblessness compounds rent burden and signals economic distress beyond just housing cost.',
+  },
+  poverty_rate: {
+    table: 'B17001',
+    what: 'Share of population with income below the federal poverty threshold.',
+    why: 'The federal line is a crude floor — Bay Area "poor" starts much higher. High-poverty tracts are priority for any safety-net outreach.',
+  },
+  vacancy_rate: {
+    table: 'B25002',
+    what: 'Share of housing units that are vacant.',
+    why: 'High vacancy in a high-rent tract = warehousing or speculation, not "no demand." Useful evidence in vacancy-tax fights.',
+  },
+  occupancy_rate: {
+    table: 'B25002',
+    what: 'Share of housing units that are occupied (1 − vacancy rate).',
+    why: 'Inverse of vacancy. Useful as a sanity check that occupancy + vacancy ≈ 100%.',
+  },
+  eviction_rate: {
+    sourceUrl: 'https://evictionlab.org/map/',
+    sourceLabel: 'Eviction Lab',
+    what: 'Court-recorded eviction filings per 1,000 renter households (Eviction Lab; pre-2018, pre-CARES Act for most CA counties).',
+    why: 'The most direct measure of landlord aggression and tenant precarity. Where filings concentrate, organizing pays off most.',
+  },
+  pct_foreign_born: {
+    table: 'B05002',
+    what: 'Share of residents born outside the United States.',
+    why: 'Concentrations shape language access needs, ICE risk in eviction defense, and which community institutions to partner with.',
+  },
+  pct_naturalized: {
+    table: 'B05002',
+    what: 'Share of residents who were born abroad and have become U.S. citizens.',
+    why: 'Citizenship changes the calculus on formal political action vs. undocumented-tenant risk.',
+  },
+  pct_noncitizen: {
+    table: 'B05002',
+    what: 'Share of residents who were born abroad and are not U.S. citizens (mix of undocumented and lawful permanent residents).',
+    why: 'High non-citizen tracts need extra care on ICE risk, public-charge fears, and multilingual outreach.',
+  },
+  pct_limited_eng_any: {
+    table: 'B16002',
+    what: 'Households where no member age 14+ speaks English "very well." (ACS phrasing.)',
+    why: 'Tells you what languages your flyers, door-knocks, and tenant-rights workshops need to be in.',
+  },
+  pct_limited_eng_spanish: {
+    table: 'B16002',
+    what: 'Subset of limited-English households where the primary non-English language is Spanish.',
+    why: 'Identifies where Spanish-language outreach would land — vs. tracts that need API-language materials instead.',
+  },
+  pct_limited_eng_apilang: {
+    table: 'B16002',
+    what: 'Subset of limited-English households where the primary language is Chinese, Vietnamese, Tagalog, Korean, etc.',
+    why: 'East Bay has dense pockets of these populations; signals need for Cantonese/Mandarin/Vietnamese/Korean outreach.',
+  },
+  pct_pub_assist_or_snap: {
+    table: 'B22010',
+    what: 'Share of households receiving SNAP (food stamps) or cash public assistance.',
+    why: 'Direct indicator of poverty and benefits-cliff vulnerability. Eviction here often means homelessness, not just a move.',
+  },
+  pct_renter_no_vehicle: {
+    table: 'B25044',
+    what: 'Share of renter households with no vehicle available.',
+    why: 'Class signal in car-dependent California. Predicts dependence on local jobs and services — displacement = job loss too.',
+  },
+  pct_under_35k: {
+    table: 'B19001',
+    what: 'Share of households with annual income below $35,000.',
+    why: 'In Alameda County, $35k/yr can\'t plausibly cover market rent. These households are by definition rent-burdened or doubled-up.',
+  },
+  pct_black: {
+    table: 'B03002',
+    what: 'Share of residents identifying as Black or African American (alone, non-Hispanic).',
+    why: 'Bay Area Black communities have been disproportionately displaced since redlining and BART. The "since 2010" delta is the gentrification reading.',
+  },
+  pct_hispanic: {
+    table: 'B03002',
+    what: 'Share of residents identifying as Hispanic or Latino (any race).',
+    why: 'Often coincides with Spanish-language outreach needs and ICE-vulnerable households.',
+  },
+  pct_asian: {
+    table: 'B03002',
+    what: 'Share of residents identifying as Asian (alone, non-Hispanic).',
+    why: 'East Bay has large Cantonese / Vietnamese / Tagalog renter communities. Signals language and cultural-organizing needs.',
+  },
+  pct_white: {
+    table: 'B03002',
+    what: 'Share of residents identifying as White and not Hispanic.',
+    why: 'Trajectory matters more than the level — large White-share growth since 2010 is a classic gentrification fingerprint.',
+  },
+  pct_lang_english_only: {
+    table: 'B16001',
+    what: 'Households where only English is spoken at home.',
+    why: 'Inverse of multilingual outreach need. Low values = more language access required for any organizing campaign.',
+  },
+  pct_lor: {
+    table: 'B25026',
+    what: 'When the current householder moved into their unit, in time cohorts.',
+    why: 'High recent-mover share = high turnover = often the signature of gentrification displacing long-time residents.',
+  },
+};
+
+const InfoPopover = ({ meta }) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const closeTimer = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (!meta) return null;
+
+  const tableUrl = meta.table ? `https://data.census.gov/table?q=${meta.table}` : null;
+
+  return (
+    <span
+      ref={wrapRef}
+      style={{position:'relative', display:'inline-block', marginLeft:6, fontWeight:'normal'}}
+      onMouseEnter={() => { clearTimeout(closeTimer.current); setOpen(true); }}
+      onMouseLeave={() => { closeTimer.current = setTimeout(() => setOpen(false), 250); }}
+    >
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        aria-label="What this means and where it comes from"
+        style={{
+          background:'none', border:'none', padding:0, cursor:'help',
+          color: open ? '#2563eb' : '#94a3b8',
+          fontSize:'0.78rem', lineHeight:1, verticalAlign:'baseline',
+          borderBottom:'1px dotted #cbd5e1',
+        }}
+      >
+        ⓘ
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          style={{
+            position:'absolute', zIndex:1000, top:'calc(100% + 6px)', left:'-12px',
+            width: 320, maxWidth: 'min(320px, 80vw)',
+            padding:'12px 14px', background:'white', borderRadius:6,
+            border:'1px solid #cbd5e1', boxShadow:'0 12px 24px rgba(15,23,42,0.18)',
+            fontSize:'0.78rem', lineHeight:1.5, color:'#1e293b',
+            fontWeight:'normal', textAlign:'left',
+          }}
+        >
+          {meta.what && (
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:'0.62rem', fontWeight:700, color:'#64748b', letterSpacing:'0.06em', marginBottom:3}}>WHAT THIS IS</div>
+              <div>{meta.what}</div>
+            </div>
+          )}
+          {meta.why && (
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:'0.62rem', fontWeight:700, color:'#16a34a', letterSpacing:'0.06em', marginBottom:3}}>WHY IT MATTERS</div>
+              <div>{meta.why}</div>
+            </div>
+          )}
+          <div style={{borderTop:'1px solid #f1f5f9', paddingTop:8}}>
+            <div style={{fontSize:'0.62rem', fontWeight:700, color:'#64748b', letterSpacing:'0.06em', marginBottom:3}}>VERIFY</div>
+            {tableUrl && (
+              <a href={tableUrl} target="_blank" rel="noopener noreferrer"
+                 onClick={e => e.stopPropagation()}
+                 style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
+                ACS table {meta.table} on data.census.gov ↗
+              </a>
+            )}
+            {meta.sourceUrl && (
+              <a href={meta.sourceUrl} target="_blank" rel="noopener noreferrer"
+                 onClick={e => e.stopPropagation()}
+                 style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
+                {meta.sourceLabel || 'Source'} ↗
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </span>
+  );
+};
 
 const fmt = (v, suffix = '') => {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
@@ -24,35 +250,11 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const SourceLink = ({ table, url, label }) => {
-  if (!table && !url) return null;
-  const href = url || `https://data.census.gov/table?q=${table}`;
-  const tip = url
-    ? `Source: ${label || 'external'} — opens in new tab`
-    : `Source: ACS 5-year, table ${table} — opens data.census.gov in new tab`;
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={tip}
-      onClick={e => e.stopPropagation()}
-      style={{
-        marginLeft:6, color:'#94a3b8', textDecoration:'none',
-        fontSize:'0.75rem', cursor:'help', verticalAlign:'baseline',
-        borderBottom:'1px dotted #cbd5e1',
-      }}
-    >
-      ⓘ
-    </a>
-  );
-};
-
-const Row = ({ label, value, delta = null, deltaSuffix = '%', table = null, sourceUrl = null, sourceLabel = null }) => (
+const Row = ({ label, value, delta = null, deltaSuffix = '%', metaKey = null }) => (
   <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f1f5f9', alignItems:'baseline'}}>
     <span style={{color:'#475569'}}>
       {label}
-      <SourceLink table={table} url={sourceUrl} label={sourceLabel} />
+      <InfoPopover meta={metaKey ? META[metaKey] : null} />
     </span>
     <span>
       <strong>{value}</strong>
@@ -172,37 +374,36 @@ const FactSheet = ({ p, allFeatures = [] }) => {
         {/* LEFT */}
         <div>
           <Section title="POPULATION & HOUSING">
-            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} table="B01003" />
-            <Row label="Avg. household size" value={fmt(p.avg_household_size)} table="B25010" />
-            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} table="B25064" />
-            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} table="B19013" />
-            <Row label="Median year built" value={fmt(p.median_year_built)} table="B25035" />
+            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} metaKey="total_pop" />
+            <Row label="Avg. household size" value={fmt(p.avg_household_size)} metaKey="avg_household_size" />
+            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} metaKey="median_gross_rent" />
+            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} metaKey="median_hh_income" />
+            <Row label="Median year built" value={fmt(p.median_year_built)} metaKey="median_year_built" />
           </Section>
 
           <Section title="RISK SIGNALS">
-            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} table="B25070" />
-            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} table="B23025" />
-            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} table="B17001" />
-            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} table="B25002" />
-            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} table="B25002" />
+            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} metaKey="rent_burden" />
+            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} metaKey="unemployment" />
+            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} metaKey="poverty_rate" />
+            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} metaKey="vacancy_rate" />
+            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} metaKey="occupancy_rate" />
             <Row
               label="Eviction rate (per 1k renters)"
               value={p.eviction_rate !== null && p.eviction_rate !== undefined ? p.eviction_rate.toFixed(1) : '—'}
-              sourceUrl="https://evictionlab.org/map/"
-              sourceLabel="Eviction Lab"
+              metaKey="eviction_rate"
             />
           </Section>
 
           <Section title="CLASS COMPOSITION">
-            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} table="B05002" />
-            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} table="B05002" />
-            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} table="B05002" />
-            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} table="B16002" />
-            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} table="B16002" />
-            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} table="B16002" />
-            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} table="B22010" />
-            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} table="B25044" />
-            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} table="B19001" />
+            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} metaKey="pct_foreign_born" />
+            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} metaKey="pct_naturalized" />
+            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} metaKey="pct_noncitizen" />
+            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} metaKey="pct_limited_eng_any" />
+            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} metaKey="pct_limited_eng_spanish" />
+            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} metaKey="pct_limited_eng_apilang" />
+            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} metaKey="pct_pub_assist_or_snap" />
+            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} metaKey="pct_renter_no_vehicle" />
+            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} metaKey="pct_under_35k" />
           </Section>
         </div>
 
@@ -215,18 +416,18 @@ const FactSheet = ({ p, allFeatures = [] }) => {
               { label:'Asian', value:p.pct_asian, color:'#9333ea' },
               { label:'White (non-Hisp)', value:p.pct_white, color:'#64748b' },
             ]} />
-            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} table="B03002" />
-            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} table="B03002" />
-            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} table="B03002" />
-            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} table="B03002" />
+            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} metaKey="pct_black" />
+            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} metaKey="pct_hispanic" />
+            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} metaKey="pct_asian" />
+            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} metaKey="pct_white" />
           </Section>
 
           <Section title="LANGUAGE AT HOME">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12}}>
-              <span style={{color:'#475569'}}>English-only households<SourceLink table="B16001" /></span>
+              <span style={{color:'#475569'}}>English-only households<InfoPopover meta={META.pct_lang_english_only} /></span>
               <strong style={{fontSize:'1.6rem', color:'#2563eb'}}>{fmt(p.pct_lang_english_only, '%')}</strong>
             </div>
-            <div style={{fontSize:'0.85rem', color:'#475569', marginBottom:6}}>Top non-English languages<SourceLink table="B16001" />:</div>
+            <div style={{fontSize:'0.85rem', color:'#475569', marginBottom:6}}>Top non-English languages<InfoPopover meta={META.pct_lang_english_only} />:</div>
             {topLangs.length === 0 && <div style={{color:'#94a3b8', fontSize:'0.9rem'}}>—</div>}
             {topLangs.map(l => (
               <div key={l.key} style={{marginBottom:6}}>
@@ -242,7 +443,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
 
           <Section title="LENGTH OF RESIDENCY">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12}}>
-              <span style={{color:'#475569'}}>Moved in within last ~5 years<SourceLink table="B25026" /></span>
+              <span style={{color:'#475569'}}>Moved in within last ~5 years<InfoPopover meta={META.pct_lor} /></span>
               <strong style={{fontSize:'1.4rem', color:'#dc2626'}}>{recentMovers.toFixed(1)}%</strong>
             </div>
             <StackedBar segments={[
@@ -254,7 +455,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
               { label:'pre-1990', value:p.pct_lor_1989_or_earlier, color:'#0891b2' },
             ]} />
             {RESIDENCY_KEYS.map(r => (
-              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} table="B25026" />
+              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} metaKey="pct_lor" />
             ))}
           </Section>
         </div>
