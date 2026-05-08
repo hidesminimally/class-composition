@@ -34,7 +34,8 @@ function App() {
     fetch('/data.geojson').then(r => r.json()).then(json => {
       setMapData(json.features);
       const uniqueLocals = [...new Set(json.features.map(f => f.properties.tanc_local))].filter(Boolean).sort();
-      setAllLocals(uniqueLocals); setSelectedLocals(uniqueLocals);
+      setAllLocals(uniqueLocals);
+      setSelectedLocals(uniqueLocals.includes('Central') ? ['Central'] : uniqueLocals);
     }).catch(console.error);
   }, []);
 

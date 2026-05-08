@@ -1,6 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const DataTable = ({ features, isExpanded, onToggleExpanded, sortKey, sortAsc, onSort, selectedId, onSelect, mobileActive }) => {
+  const selectedRowRef = useRef(null);
+
+  useEffect(() => {
+    if (!selectedId || selectedId === 'AGGREGATE' || !isExpanded) return;
+    selectedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedId, isExpanded]);
+
   const getSortIcon = (key) =>
     sortKey !== key
       ? <span style={{opacity:0.3}}>↕</span>
@@ -25,11 +32,13 @@ const DataTable = ({ features, isExpanded, onToggleExpanded, sortKey, sortAsc, o
           <tbody>
             {features.map(f => {
               const r = f.properties;
+              const isSel = selectedId === r.id;
               return (
                 <tr
                   key={r.id}
+                  ref={isSel ? selectedRowRef : null}
                   onClick={() => onSelect(f)}
-                  className={selectedId === r.id ? 'selected' : ''}
+                  className={isSel ? 'selected' : ''}
                 >
                   <td>{r.tanc_local}</td><td>{r.id}</td>
                   <td>{r.rent_burden}%</td><td>{r.unemployment}%</td>
