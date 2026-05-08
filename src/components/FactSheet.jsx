@@ -137,7 +137,14 @@ const META = {
   },
 };
 
-const InfoPopover = ({ meta }) => {
+const fmtRaw = (v, kind) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  if (kind === 'usd') return `$${Math.round(v).toLocaleString()}`;
+  if (kind === 'count') return Math.round(v).toLocaleString();
+  return `${Number(v).toFixed(1)}%`;
+};
+
+const InfoPopover = ({ meta, geoid, currentRaw, priorRaw, delta, fmtKind = 'pct' }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const closeTimer = useRef(null);
@@ -158,7 +165,23 @@ const InfoPopover = ({ meta }) => {
 
   if (!meta) return null;
 
-  const tableUrl = meta.table ? `https://data.census.gov/table?q=${meta.table}` : null;
+  // Vintage-specific links: 2018–22 5yr = ACSDT5Y2022, 2008–12 5yr = ACSDT5Y2012.
+  // Tract-scoped via the GEOID g= param so the user lands on the same tract.
+  const currentVintageUrl = (meta.table && geoid)
+    ? `https://data.census.gov/table/ACSDT5Y2022.${meta.table}?g=1400000US${geoid}`
+    : meta.table ? `https://data.census.gov/table?q=${meta.table}` : null;
+  const priorVintageUrl = (meta.table && geoid)
+    ? `https://data.census.gov/table/ACSDT5Y2012.${meta.table}?g=1400000US${geoid}`
+    : null;
+
+  // Back-compute prior endpoint from current + delta when we don't have the raw 2010 field.
+  let computedPrior = priorRaw;
+  if ((computedPrior === null || computedPrior === undefined) &&
+      typeof currentRaw === 'number' && typeof delta === 'number' && delta !== -100) {
+    computedPrior = currentRaw / (1 + delta / 100);
+  }
+  const showMath = typeof currentRaw === 'number' && typeof computedPrior === 'number' && typeof delta === 'number';
+  const priorEstimated = showMath && (priorRaw === null || priorRaw === undefined);
 
   return (
     <span
@@ -185,7 +208,7 @@ const InfoPopover = ({ meta }) => {
           role="tooltip"
           style={{
             position:'absolute', zIndex:1000, top:'calc(100% + 6px)', left:'-12px',
-            width: 320, maxWidth: 'min(320px, 80vw)',
+            width: 340, maxWidth: 'min(340px, 80vw)',
             padding:'12px 14px', background:'white', borderRadius:6,
             border:'1px solid #cbd5e1', boxShadow:'0 12px 24px rgba(15,23,42,0.18)',
             fontSize:'0.78rem', lineHeight:1.5, color:'#1e293b',
@@ -204,21 +227,55 @@ const InfoPopover = ({ meta }) => {
               <div>{meta.why}</div>
             </div>
           )}
+          {showMath && (
+            <div style={{marginBottom:10, padding:'8px 10px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:4}}>
+              <div style={{fontSize:'0.62rem', fontWeight:700, color:'#64748b', letterSpacing:'0.06em', marginBottom:4}}>HOW THE DELTA IS COMPUTED</div>
+              <div style={{fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:'0.78rem'}}>
+                <strong>{fmtRaw(computedPrior, fmtKind)}</strong>
+                <span style={{color:'#64748b'}}> (2008–12 ACS) → </span>
+                <strong>{fmtRaw(currentRaw, fmtKind)}</strong>
+                <span style={{color:'#64748b'}}> (2018–22 ACS) = </span>
+                <strong style={{color: delta >= 0 ? '#16a34a' : '#dc2626'}}>
+                  {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
+                </strong>
+              </div>
+              {priorEstimated && (
+                <div style={{fontSize:'0.68rem', color:'#94a3b8', marginTop:4, fontStyle:'italic'}}>
+                  2008–12 endpoint back-computed from current value and delta.
+                </div>
+              )}
+            </div>
+          )}
           <div style={{borderTop:'1px solid #f1f5f9', paddingTop:8}}>
-            <div style={{fontSize:'0.62rem', fontWeight:700, color:'#64748b', letterSpacing:'0.06em', marginBottom:3}}>VERIFY</div>
-            {tableUrl && (
-              <a href={tableUrl} target="_blank" rel="noopener noreferrer"
-                 onClick={e => e.stopPropagation()}
-                 style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
-                ACS table {meta.table} on data.census.gov ↗
-              </a>
+            <div style={{fontSize:'0.62rem', fontWeight:700, color:'#64748b', letterSpacing:'0.06em', marginBottom:5}}>
+              VERIFY ON data.census.gov
+            </div>
+            {currentVintageUrl && (
+              <div>
+                <a href={currentVintageUrl} target="_blank" rel="noopener noreferrer"
+                   onClick={e => e.stopPropagation()}
+                   style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
+                  Table {meta.table} · 2018–22 ACS{geoid ? ' · this tract' : ''} ↗
+                </a>
+              </div>
+            )}
+            {priorVintageUrl && showMath && (
+              <div style={{marginTop:3}}>
+                <a href={priorVintageUrl} target="_blank" rel="noopener noreferrer"
+                   onClick={e => e.stopPropagation()}
+                   style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
+                  Table {meta.table} · 2008–12 ACS · this tract ↗
+                </a>
+              </div>
             )}
             {meta.sourceUrl && (
-              <a href={meta.sourceUrl} target="_blank" rel="noopener noreferrer"
-                 onClick={e => e.stopPropagation()}
-                 style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
-                {meta.sourceLabel || 'Source'} ↗
-              </a>
+              <div style={{marginTop:3}}>
+                <a href={meta.sourceUrl} target="_blank" rel="noopener noreferrer"
+                   onClick={e => e.stopPropagation()}
+                   style={{color:'#2563eb', textDecoration:'underline', display:'inline-block'}}>
+                  {meta.sourceLabel || 'Source'} ↗
+                </a>
+              </div>
             )}
           </div>
         </div>
@@ -250,11 +307,19 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const Row = ({ label, value, delta = null, deltaSuffix = '%', metaKey = null }) => (
+const Row = ({ label, value, delta = null, deltaSuffix = '%', metaKey = null,
+               geoid = null, currentRaw = null, priorRaw = null, fmtKind = 'pct' }) => (
   <div style={{display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f1f5f9', alignItems:'baseline'}}>
     <span style={{color:'#475569'}}>
       {label}
-      <InfoPopover meta={metaKey ? META[metaKey] : null} />
+      <InfoPopover
+        meta={metaKey ? META[metaKey] : null}
+        geoid={geoid}
+        currentRaw={currentRaw}
+        priorRaw={priorRaw}
+        delta={delta}
+        fmtKind={fmtKind}
+      />
     </span>
     <span>
       <strong>{value}</strong>
@@ -374,36 +439,40 @@ const FactSheet = ({ p, allFeatures = [] }) => {
         {/* LEFT */}
         <div>
           <Section title="POPULATION & HOUSING">
-            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} metaKey="total_pop" />
-            <Row label="Avg. household size" value={fmt(p.avg_household_size)} metaKey="avg_household_size" />
-            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} metaKey="median_gross_rent" />
-            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} metaKey="median_hh_income" />
-            <Row label="Median year built" value={fmt(p.median_year_built)} metaKey="median_year_built" />
+            <Row label="Total population" value={fmt(p.total_pop)} delta={p.total_pop_delta_pct} metaKey="total_pop"
+                 geoid={geoid} currentRaw={p.total_pop} priorRaw={p.total_pop_2010} fmtKind="count" />
+            <Row label="Avg. household size" value={fmt(p.avg_household_size)} metaKey="avg_household_size" geoid={geoid} />
+            <Row label="Median rent" value={p.median_gross_rent ? `$${fmt(p.median_gross_rent)}` : '—'} delta={p.median_gross_rent_delta_pct} metaKey="median_gross_rent"
+                 geoid={geoid} currentRaw={p.median_gross_rent} fmtKind="usd" />
+            <Row label="Median household income" value={p.median_hh_income ? `$${fmt(p.median_hh_income)}` : '—'} delta={p.median_hh_income_delta_pct} metaKey="median_hh_income"
+                 geoid={geoid} currentRaw={p.median_hh_income} fmtKind="usd" />
+            <Row label="Median year built" value={fmt(p.median_year_built)} metaKey="median_year_built" geoid={geoid} />
           </Section>
 
           <Section title="RISK SIGNALS">
-            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} metaKey="rent_burden" />
-            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} metaKey="unemployment" />
-            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} metaKey="poverty_rate" />
-            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} metaKey="vacancy_rate" />
-            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} metaKey="occupancy_rate" />
+            <Row label="Rent burden (renters >30%)" value={fmt(p.rent_burden, '%')} metaKey="rent_burden" geoid={geoid} />
+            <Row label="Unemployment rate" value={fmt(p.unemployment, '%')} metaKey="unemployment" geoid={geoid} />
+            <Row label="Poverty rate" value={fmt(p.poverty_rate, '%')} metaKey="poverty_rate" geoid={geoid} />
+            <Row label="Vacancy rate" value={fmt(p.vacancy_rate, '%')} metaKey="vacancy_rate" geoid={geoid} />
+            <Row label="Occupancy rate" value={fmt(p.occupancy_rate, '%')} metaKey="occupancy_rate" geoid={geoid} />
             <Row
               label="Eviction rate (per 1k renters)"
               value={p.eviction_rate !== null && p.eviction_rate !== undefined ? p.eviction_rate.toFixed(1) : '—'}
               metaKey="eviction_rate"
+              geoid={geoid}
             />
           </Section>
 
           <Section title="CLASS COMPOSITION">
-            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} metaKey="pct_foreign_born" />
-            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} metaKey="pct_naturalized" />
-            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} metaKey="pct_noncitizen" />
-            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} metaKey="pct_limited_eng_any" />
-            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} metaKey="pct_limited_eng_spanish" />
-            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} metaKey="pct_limited_eng_apilang" />
-            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} metaKey="pct_pub_assist_or_snap" />
-            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} metaKey="pct_renter_no_vehicle" />
-            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} metaKey="pct_under_35k" />
+            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} metaKey="pct_foreign_born" geoid={geoid} />
+            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} metaKey="pct_naturalized" geoid={geoid} />
+            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} metaKey="pct_noncitizen" geoid={geoid} />
+            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} metaKey="pct_limited_eng_any" geoid={geoid} />
+            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} metaKey="pct_limited_eng_spanish" geoid={geoid} />
+            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} metaKey="pct_limited_eng_apilang" geoid={geoid} />
+            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} metaKey="pct_pub_assist_or_snap" geoid={geoid} />
+            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} metaKey="pct_renter_no_vehicle" geoid={geoid} />
+            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} metaKey="pct_under_35k" geoid={geoid} />
           </Section>
         </div>
 
@@ -416,10 +485,14 @@ const FactSheet = ({ p, allFeatures = [] }) => {
               { label:'Asian', value:p.pct_asian, color:'#9333ea' },
               { label:'White (non-Hisp)', value:p.pct_white, color:'#64748b' },
             ]} />
-            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} metaKey="pct_black" />
-            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} metaKey="pct_hispanic" />
-            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} metaKey="pct_asian" />
-            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} metaKey="pct_white" />
+            <Row label="Black / African American" value={fmt(p.pct_black, '%')} delta={p.pct_black_delta_pct} metaKey="pct_black"
+                 geoid={geoid} currentRaw={p.pct_black} priorRaw={p.pct_black_2010} fmtKind="pct" />
+            <Row label="Hispanic / Latinx" value={fmt(p.pct_hispanic, '%')} delta={p.pct_hispanic_delta_pct} metaKey="pct_hispanic"
+                 geoid={geoid} currentRaw={p.pct_hispanic} priorRaw={p.pct_hispanic_2010} fmtKind="pct" />
+            <Row label="Asian" value={fmt(p.pct_asian, '%')} delta={p.pct_asian_delta_pct} metaKey="pct_asian"
+                 geoid={geoid} currentRaw={p.pct_asian} priorRaw={p.pct_asian_2010} fmtKind="pct" />
+            <Row label="White (non-Hispanic)" value={fmt(p.pct_white, '%')} delta={p.pct_white_delta_pct} metaKey="pct_white"
+                 geoid={geoid} currentRaw={p.pct_white} priorRaw={p.pct_white_2010} fmtKind="pct" />
           </Section>
 
           <Section title="LANGUAGE AT HOME">
@@ -455,7 +528,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
               { label:'pre-1990', value:p.pct_lor_1989_or_earlier, color:'#0891b2' },
             ]} />
             {RESIDENCY_KEYS.map(r => (
-              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} metaKey="pct_lor" />
+              <Row key={r.key} label={r.label} value={fmt(p[r.key], '%')} metaKey="pct_lor" geoid={geoid} />
             ))}
           </Section>
         </div>
