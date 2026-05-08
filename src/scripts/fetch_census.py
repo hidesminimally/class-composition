@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import pandas as pd
 from census import Census
 import config
@@ -12,8 +13,42 @@ VINTAGE_YEAR_MAP = {
     "2010": 2012,  # latest year in 2008-2012 5-year
 }
 
-# Variables that may not be available in older vintages — degrade gracefully
-GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_']
+# Variables that may not be available in older vintages — degrade gracefully.
+# Class-composition layer (B05*/C16002/B19058/B25044/B19001) was only needed for
+# 2020 (current snapshot), so dropping it from 2010 is intentional.
+GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_', 'B05001_', 'B05002_',
+                             'C16002_', 'B19058_', 'B25044_', 'B19001_']
+
+# Census API "annotation" sentinels meaning "data not available / suppressed".
+# See https://www.census.gov/data/developers/data-sets/acs-5year/data-notes.html
+# These must be replaced with NaN before any arithmetic — otherwise they
+# propagate through CPI math and produce nonsense like -$666M median rent.
+CENSUS_NULL_SENTINELS = [-666666666, -888888888, -999999999, -222222222,
+                         -333333333, -555555555, -111111111]
+
+
+ID_COLS = {'state', 'county', 'tract', 'NAME', 'id', 'GEOID'}
+
+
+def normalize_census_nulls(df):
+    """Replace Census API null/suppressed-data sentinels with NaN. The API
+    returns numbers as strings, so for non-numeric columns we replace string
+    sentinels then attempt numeric coercion. Identifier columns (state,
+    county, tract, NAME, id) are explicitly skipped to preserve leading zeros
+    and string formatting."""
+    str_sentinels = [str(s) for s in CENSUS_NULL_SENTINELS]
+    for col in df.columns:
+        if col in ID_COLS:
+            continue
+        kind = df[col].dtype.kind
+        if kind in 'fi':
+            df[col] = df[col].replace(CENSUS_NULL_SENTINELS, np.nan)
+        else:
+            cleaned = df[col].replace(str_sentinels, np.nan)
+            coerced = pd.to_numeric(cleaned, errors='coerce')
+            if coerced.notna().sum() == cleaned.notna().sum():
+                df[col] = coerced
+    return df
 
 
 def _get_fields_for_vintage(vintage):
@@ -66,37 +101,91 @@ def fetch_and_clean_data(vintage="2020"):
     df = df.rename(columns=fields)
     df['id'] = df['tract'].astype(str).str.zfill(6)
 
+    # Replace Census null sentinels (-666666666 etc.) BEFORE math
+    df = normalize_census_nulls(df)
+
     print(f"   Fetched {len(df)} tracts. Calculating derived metrics...")
+    df = compute_derived_metrics(df)
 
-    df['pct_white'] = (df['pop_white_non_hisp'] / df['total_pop'] * 100).round(1)
-    df['pct_black'] = (df['pop_black'] / df['total_pop'] * 100).round(1)
-    df['pct_asian'] = (df['pop_asian'] / df['total_pop'] * 100).round(1)
-    df['pct_hispanic'] = (df['pop_hispanic'] / df['total_pop'] * 100).round(1)
+    df.to_csv(output_file, index=False)
+    print(f"Saved fresh Census data to {output_file}")
 
-    df['unemployment'] = (df['unemployed'] / df['labor_force'] * 100).round(1).fillna(0)
-    df['poverty_rate'] = (df['pop_poverty'] / df['pop_poverty_total'] * 100).round(1).fillna(0)
-    df['vacancy_rate'] = (df['housing_units_vacant'] / df['housing_units_total'] * 100).round(1).fillna(0)
+
+def compute_derived_metrics(df):
+    """Pure helper: given a renamed Census DataFrame, return df with derived
+    metrics added. Pulled out for unit-testing without API calls."""
+    df = df.copy()
+
+    def _safe_pct(num, den):
+        return (num / den * 100).replace([np.inf, -np.inf], np.nan).round(1).fillna(0)
+
+    df['pct_white'] = _safe_pct(df['pop_white_non_hisp'], df['total_pop'])
+    df['pct_black'] = _safe_pct(df['pop_black'], df['total_pop'])
+    df['pct_asian'] = _safe_pct(df['pop_asian'], df['total_pop'])
+    df['pct_hispanic'] = _safe_pct(df['pop_hispanic'], df['total_pop'])
+
+    df['unemployment'] = _safe_pct(df['unemployed'], df['labor_force'])
+    df['poverty_rate'] = _safe_pct(df['pop_poverty'], df['pop_poverty_total'])
+    df['vacancy_rate'] = _safe_pct(df['housing_units_vacant'], df['housing_units_total'])
     df['occupancy_rate'] = (100.0 - df['vacancy_rate']).round(1)
 
     burdened_count = df['burden_30_35'] + df['burden_35_40'] + df['burden_40_50'] + df['burden_50_plus']
-    df['rent_burden'] = (burdened_count / df['renter_households_total'] * 100).round(1).fillna(0)
+    df['rent_burden'] = _safe_pct(burdened_count, df['renter_households_total'])
 
-    # Length of residency percentages (renter buckets)
     if 'lor_total' in df.columns:
         for bucket_col in ['lor_2019_or_later', 'lor_2015_2018', 'lor_2010_2014',
                            'lor_2000_2009', 'lor_1990_1999', 'lor_1989_or_earlier']:
             if bucket_col in df.columns:
-                df[f'pct_{bucket_col}'] = (df[bucket_col] / df['lor_total'] * 100).round(1).fillna(0)
+                df[f'pct_{bucket_col}'] = _safe_pct(df[bucket_col], df['lor_total'])
 
-    # Language percentages
     if 'lang_total' in df.columns:
         for lang_col in ['lang_english_only', 'lang_spanish', 'lang_french',
                          'lang_chinese', 'lang_vietnamese', 'lang_tagalog', 'lang_korean']:
             if lang_col in df.columns:
-                df[f'pct_{lang_col}'] = (df[lang_col] / df['lang_total'] * 100).round(1).fillna(0)
+                df[f'pct_{lang_col}'] = _safe_pct(df[lang_col], df['lang_total'])
 
-    df.to_csv(output_file, index=False)
-    print(f"Saved fresh Census data to {output_file}")
+    # ---- Class composition derived metrics ----
+
+    # Nativity / citizenship
+    if 'nativity_total' in df.columns:
+        df['pct_foreign_born'] = _safe_pct(df['pop_foreign_born'], df['nativity_total'])
+    if 'citizenship_total' in df.columns:
+        df['pct_naturalized'] = _safe_pct(df['pop_naturalized'], df['citizenship_total'])
+        df['pct_noncitizen'] = _safe_pct(df['pop_noncitizen'], df['citizenship_total'])
+
+    # Limited-English household share, by language family
+    if 'hh_lang_total' in df.columns:
+        for li_col, out_col in [
+            ('hh_limited_eng_spanish', 'pct_limited_eng_spanish'),
+            ('hh_limited_eng_indoeuropean', 'pct_limited_eng_indoeuropean'),
+            ('hh_limited_eng_apilang', 'pct_limited_eng_apilang'),
+            ('hh_limited_eng_other', 'pct_limited_eng_other'),
+        ]:
+            if li_col in df.columns:
+                df[out_col] = _safe_pct(df[li_col], df['hh_lang_total'])
+        # Aggregate across all language families = "any limited-English household"
+        li_cols = [c for c in ['hh_limited_eng_spanish','hh_limited_eng_indoeuropean',
+                               'hh_limited_eng_apilang','hh_limited_eng_other'] if c in df.columns]
+        if li_cols:
+            df['pct_limited_eng_any'] = _safe_pct(df[li_cols].sum(axis=1), df['hh_lang_total'])
+
+    # SNAP / public assistance
+    if 'pub_assist_total' in df.columns:
+        df['pct_pub_assist_or_snap'] = _safe_pct(df['pub_assist_or_snap'], df['pub_assist_total'])
+
+    # Renter household with no vehicle (transit-dependent renter signal)
+    if 'renter_hh_total' in df.columns:
+        df['pct_renter_no_vehicle'] = _safe_pct(df['renter_hh_no_vehicle'], df['renter_hh_total'])
+
+    # Low-income share = households earning < $35k / all households
+    if 'inc_dist_total' in df.columns:
+        low_income_cols = ['inc_under_10k', 'inc_10_15k', 'inc_15_20k',
+                           'inc_20_25k', 'inc_25_30k', 'inc_30_35k']
+        present = [c for c in low_income_cols if c in df.columns]
+        if present:
+            df['pct_under_35k'] = _safe_pct(df[present].sum(axis=1), df['inc_dist_total'])
+
+    return df
 
 
 if __name__ == "__main__":

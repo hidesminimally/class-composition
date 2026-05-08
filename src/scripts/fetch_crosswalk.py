@@ -17,33 +17,32 @@ URL = "https://www2.census.gov/geo/docs/maps-data/data/rel2020/tract/tab20_tract
 RAW_FILE = "tab20_tract20_tract10_st06.txt"
 OUTPUT_FILE = "tract_2010_2020_crosswalk.csv"
 
+def parse_crosswalk(df, alameda_prefix):
+    """Pure helper: given the raw relationship-file DataFrame and a county
+    GEOID prefix (e.g. '06001'), return the cleaned crosswalk DataFrame
+    (tract_2010, tract_2020, area_pct). Pulled out for unit-testing without
+    network calls."""
+    df = df[df['GEOID_TRACT_20'].str.startswith(alameda_prefix)]
+    df = df[df['GEOID_TRACT_10'].str.startswith(alameda_prefix)]
+
+    return pd.DataFrame({
+        'tract_2010': df['GEOID_TRACT_10'].str[-6:].str.zfill(6),
+        'tract_2020': df['GEOID_TRACT_20'].str[-6:].str.zfill(6),
+        'area_pct': (df['AREALAND_PART'].astype(float) / df['AREALAND_TRACT_10'].astype(float)).round(4),
+    })
+
+
 def main():
     print(f"Downloading {URL}")
     urllib.request.urlretrieve(URL, RAW_FILE)
     print(f"   Saved {RAW_FILE}")
 
-    # File is pipe-delimited
     df = pd.read_csv(RAW_FILE, sep='|', dtype=str)
 
     print(f"   Columns found: {list(df.columns)}")
 
-    # The file uses GEOID_TRACT_20/10 format: 11-digit GEOID (state 2 + county 3 + tract 6)
-    # e.g. "06001400100" -> state=06, county=001, tract=400100
-    # Filter to Alameda County (FIPS 06001)
     alameda_prefix = config.STATE_FIPS + config.COUNTY_FIPS  # "06001"
-    df = df[df['GEOID_TRACT_20'].str.startswith(alameda_prefix)]
-    df = df[df['GEOID_TRACT_10'].str.startswith(alameda_prefix)]
-
-    # Build a clean small frame
-    # Extract 6-digit tract code = last 6 chars of GEOID
-    out = pd.DataFrame({
-        'tract_2010': df['GEOID_TRACT_10'].str[-6:].str.zfill(6),
-        'tract_2020': df['GEOID_TRACT_20'].str[-6:].str.zfill(6),
-        # AREALAND_PART = land area shared between 2010 and 2020 tract
-        # AREALAND_TRACT_10 = total land area of the 2010 tract
-        # area_pct = portion of 2010 tract that is in this 2020 tract
-        'area_pct': (df['AREALAND_PART'].astype(float) / df['AREALAND_TRACT_10'].astype(float)).round(4),
-    })
+    out = parse_crosswalk(df, alameda_prefix)
 
     out.to_csv(OUTPUT_FILE, index=False)
     print(f"Saved {len(out)} crosswalk rows to {OUTPUT_FILE}")

@@ -1,9 +1,11 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import MapGL, { Source, Layer, Popup } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { METRICS, HIGHLIGHT_STYLE } from '../config/metrics';
-import { computeTertiles, BIVARIATE_PALETTE } from '../lib/bivariate';
-import BivariateLegend from './BivariateLegend';
+import { computeTertiles } from '../lib/bivariate';
+import { buildPatternFilter, buildPatternExpr } from '../lib/dualEncodingPaint';
+import { makeHatchSprites } from '../lib/hatch';
+import DualEncodingLegend from './DualEncodingLegend';
 
 const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, selectedFeature, onSelect, hoverInfo, allFeatures }, ref) => {
   const mapRef = useRef();
@@ -12,7 +14,7 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
   }));
 
   // Compute county-wide tertile breaks once when allFeatures changes (i.e., at app load).
-  // Held stable as user toggles selectedLocals.
+  // Held stable as the user toggles selectedLocals.
   const tertileBreaks = useMemo(() => {
     if (!allFeatures || !allFeatures.length) return {};
     const breaks = {};
@@ -23,59 +25,44 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
     return breaks;
   }, [allFeatures]);
 
-  const isBivariate = overlayMetric && overlayMetric !== 'none' && tertileBreaks[overlayMetric] && tertileBreaks[baseMetric];
+  const isDual = overlayMetric && overlayMetric !== 'none' && tertileBreaks[overlayMetric];
 
-  // Univariate base layer (dimmed when bivariate is active so swatch shows through cleanly)
-  const baseLayerStyle = useMemo(() => {
-    if (isBivariate) {
-      // In bivariate mode, every tract gets one of 9 colors based on tertile classes.
-      const xBreaks = tertileBreaks[baseMetric];
-      const yBreaks = tertileBreaks[overlayMetric];
-      // Build a Maplibre `case` expression: classify x→{0,1,2}, classify y→{0,1,2}, look up palette.
-      const xClassExpr = ['case',
-        ['<=', ['coalesce', ['get', baseMetric], -1e9], xBreaks[0]], 0,
-        ['<=', ['coalesce', ['get', baseMetric], -1e9], xBreaks[1]], 1,
-        2,
-      ];
-      const yClassExpr = ['case',
-        ['<=', ['coalesce', ['get', overlayMetric], -1e9], yBreaks[0]], 0,
-        ['<=', ['coalesce', ['get', overlayMetric], -1e9], yBreaks[1]], 1,
-        2,
-      ];
-      // Concat into a 9-key string so we can use `match`.
-      const keyExpr = ['concat', ['to-string', xClassExpr], '-', ['to-string', yClassExpr]];
-      const colorMatch = ['match', keyExpr];
-      for (let y = 0; y <= 2; y++) {
-        for (let x = 0; x <= 2; x++) {
-          colorMatch.push(`${x}-${y}`, BIVARIATE_PALETTE[y][x]);
-        }
-      }
-      colorMatch.push('#eee'); // fallback
-
-      return {
-        id: 'census-base', type: 'fill',
-        paint: {
-          'fill-color': ['case',
-            ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
-            colorMatch,
-            '#eee'
-          ],
-          'fill-opacity': 0.75
-        }
-      };
+  // Register hatch sprites on the underlying maplibre instance once it loads.
+  // Both sprites are needed even in univariate mode (the user can flip the
+  // dropdown at any time and the layer's fill-pattern needs them already there).
+  const onMapLoad = useCallback(() => {
+    const map = mapRef.current?.getMap?.();
+    if (!map) return;
+    const sprites = makeHatchSprites();
+    for (const [id, image] of Object.entries(sprites)) {
+      if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: 1 });
     }
-    // Univariate
+  }, []);
+
+  const baseLayerStyle = useMemo(() => ({
+    id: 'census-base', type: 'fill',
+    paint: {
+      'fill-color': ['case',
+        ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
+        ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color],
+        '#eee'],
+      'fill-opacity': 0.6,
+    },
+  }), [baseMetric, selectedLocals]);
+
+  const patternLayerStyle = useMemo(() => {
+    if (!isDual) return null;
+    const yBreaks = tertileBreaks[overlayMetric];
     return {
-      id: 'census-base', type: 'fill',
+      id: 'census-pattern',
+      type: 'fill',
+      filter: buildPatternFilter(overlayMetric, yBreaks, selectedLocals),
       paint: {
-        'fill-color': ['case',
-          ['in', ['get', 'tanc_local'], ['literal', selectedLocals]],
-          ['interpolate', ['linear'], ['get', baseMetric], 0, '#fff7ec', METRICS[baseMetric].max, METRICS[baseMetric].color],
-          '#eee'],
-        'fill-opacity': 0.6
-      }
+        'fill-pattern': buildPatternExpr(overlayMetric, yBreaks),
+        'fill-opacity': 0.85,
+      },
     };
-  }, [baseMetric, overlayMetric, selectedLocals, tertileBreaks, isBivariate]);
+  }, [isDual, overlayMetric, tertileBreaks, selectedLocals]);
 
   const highlightFilter = useMemo(() =>
     (selectedFeature && selectedFeature.properties.id !== 'AGGREGATE')
@@ -91,11 +78,13 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
         initialViewState={{ longitude: -122.2712, latitude: 37.8044, zoom: 11 }}
         mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
         style={{width:'100%',height:'100%'}}
+        onLoad={onMapLoad}
         onClick={e => onSelect(e.features?.[0] || null)}
         interactiveLayerIds={['census-base']}
       >
         <Source type="geojson" data="/data.geojson">
           <Layer {...baseLayerStyle} />
+          {patternLayerStyle && <Layer {...patternLayerStyle} />}
           <Layer {...HIGHLIGHT_STYLE} filter={highlightFilter} />
         </Source>
         {hoverInfo && (
@@ -106,12 +95,12 @@ const TancMap = React.forwardRef(({ baseMetric, overlayMetric, selectedLocals, s
           >
             <div style={{color:'black', padding:'4px', fontWeight:'bold', fontSize:'0.9rem'}}>
               {hoverInfo.feature.properties[baseMetric]}%
-              {isBivariate && <span> · {hoverInfo.feature.properties[overlayMetric]}% {METRICS[overlayMetric]?.label}</span>}
+              {isDual && <span> · {hoverInfo.feature.properties[overlayMetric]}% {METRICS[overlayMetric]?.label}</span>}
             </div>
           </Popup>
         )}
       </MapGL>
-      {isBivariate && <BivariateLegend xMetric={baseMetric} yMetric={overlayMetric} />}
+      {isDual && <DualEncodingLegend xMetric={baseMetric} yMetric={overlayMetric} />}
     </>
   );
 });

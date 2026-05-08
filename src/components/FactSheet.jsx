@@ -108,6 +108,18 @@ const FactSheet = ({ p }) => {
               value={p.eviction_rate !== null && p.eviction_rate !== undefined ? p.eviction_rate.toFixed(1) : '—'}
             />
           </Section>
+
+          <Section title="CLASS COMPOSITION">
+            <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} />
+            <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} />
+            <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} />
+            <Row label="Limited-English households" value={fmt(p.pct_limited_eng_any, '%')} />
+            <Row label="  · Spanish-speaking" value={fmt(p.pct_limited_eng_spanish, '%')} />
+            <Row label="  · Asian/Pacific Island lang." value={fmt(p.pct_limited_eng_apilang, '%')} />
+            <Row label="SNAP / public assistance" value={fmt(p.pct_pub_assist_or_snap, '%')} />
+            <Row label="Renter HHs with no vehicle" value={fmt(p.pct_renter_no_vehicle, '%')} />
+            <Row label="Households earning < $35k" value={fmt(p.pct_under_35k, '%')} />
+          </Section>
         </div>
 
         {/* RIGHT */}

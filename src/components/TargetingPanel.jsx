@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { tractsToCsv, downloadCsv } from '../lib/csvExport';
+import { applyThresholds, featureToExportRow } from '../lib/targeting';
 
 // Metrics organizers want to filter on
 const FILTER_METRICS = [
@@ -29,16 +30,6 @@ const EXPORT_COLUMNS = [
   '_centroid',
 ];
 
-function getCentroid(geometry) {
-  if (!geometry || !geometry.coordinates) return null;
-  // Polygon: coordinates[0] is the outer ring
-  const ring = geometry.coordinates[0];
-  if (!ring || !ring.length) return null;
-  let sx = 0, sy = 0;
-  for (const [x, y] of ring) { sx += x; sy += y; }
-  return [+(sx / ring.length).toFixed(5), +(sy / ring.length).toFixed(5)];
-}
-
 const TargetingPanel = ({ tracts, currentLocal, onSelectTract }) => {
   const [thresholds, setThresholds] = useState(
     Object.fromEntries(FILTER_METRICS.map(m => [m.key, m.default]))
@@ -47,13 +38,14 @@ const TargetingPanel = ({ tracts, currentLocal, onSelectTract }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const filtered = useMemo(() => {
-    let rows = tracts.slice();
-    for (const m of FILTER_METRICS) {
-      if (thresholds[m.key] > 0) {
-        rows = rows.filter(t => (t.properties[m.key] ?? 0) >= thresholds[m.key]);
-      }
-    }
-    rows.sort((a, b) => (b.properties[sortKey] ?? 0) - (a.properties[sortKey] ?? 0));
+    const rows = applyThresholds(tracts, thresholds);
+    rows.sort((a, b) => {
+      const av = a.properties?.[sortKey];
+      const bv = b.properties?.[sortKey];
+      if (av === null || av === undefined || Number.isNaN(av)) return 1;
+      if (bv === null || bv === undefined || Number.isNaN(bv)) return -1;
+      return bv - av;
+    });
     return rows;
   }, [tracts, thresholds, sortKey]);
 
@@ -73,10 +65,7 @@ const TargetingPanel = ({ tracts, currentLocal, onSelectTract }) => {
   const exportSelected = () => {
     const rows = filtered
       .filter(t => selectedIds.has(t.properties.id))
-      .map(t => ({
-        ...t.properties,
-        _centroid: getCentroid(t.geometry),
-      }));
+      .map(featureToExportRow);
     if (!rows.length) {
       alert('No tracts selected. Check boxes next to tracts in the list, or use "Select all visible".');
       return;
