@@ -80,21 +80,41 @@ const GranularMap = ({ onOpenNotes }) => {
   }, []);
 
   // Merge the tract-aggregate JSON into the tract geojson. The aggregate file
-  // may be either a flat object {tract_id: count} or an array of {id, count}.
-  // Build a lookup, then write the count onto each feature for the choropleth.
+  // schema is { _meta..., tracts: { "06001401200": { total, last_year, ... } } }
+  // — keys are 11-digit GEOIDs, count field is `total`. Tract geojson uses a
+  // 6-digit local `id`, so we index the lookup by both the 11-digit key and
+  // the inner `tract_id` (6-digit) to make the join robust either way.
   const tractsWithDensity = useMemo(() => {
     if (!tracts || !aggregateMode) return null;
-    const src = aggregateSource === 'habitability' ? habByTract : oak311ByTract;
-    if (!src) return null;
+    const raw = aggregateSource === 'habitability' ? habByTract : oak311ByTract;
+    if (!raw) return null;
+    const src = raw && typeof raw === 'object' && raw.tracts ? raw.tracts : raw;
+
     const lookup = new Map();
+    const setVal = (key, val) => {
+      if (key != null && val != null) lookup.set(String(key), val);
+    };
+    const extractCount = (v) => {
+      if (typeof v === 'number') return v;
+      return v?.total ?? v?.count ?? v?.n ?? 0;
+    };
+
     if (Array.isArray(src)) {
       for (const r of src) {
-        const id = r.id ?? r.tract_id ?? r.geoid ?? r.GEOID;
-        if (id != null) lookup.set(String(id), r.count ?? r.n ?? 0);
+        const count = extractCount(r);
+        setVal(r.id, count);
+        setVal(r.tract_id, count);
+        setVal(r.geoid, count);
+        setVal(r.GEOID, count);
       }
     } else if (typeof src === 'object') {
       for (const [k, v] of Object.entries(src)) {
-        lookup.set(String(k), typeof v === 'number' ? v : (v?.count ?? 0));
+        const count = extractCount(v);
+        setVal(k, count);                                        // 11-digit GEOID
+        setVal(v?.tract_id, count);                              // 6-digit local id
+        if (typeof k === 'string' && k.length === 11) {
+          setVal(k.slice(5), count);                             // strip 06001 prefix
+        }
       }
     }
     return {
@@ -109,14 +129,24 @@ const GranularMap = ({ onOpenNotes }) => {
     };
   }, [tracts, habByTract, oak311ByTract, aggregateMode, aggregateSource]);
 
-  const densityMax = useMemo(() => {
-    if (!tractsWithDensity) return 0;
-    let m = 0;
-    for (const f of tractsWithDensity.features) {
-      const v = f.properties._density || 0;
-      if (v > m) m = v;
-    }
-    return m;
+  // Long-tail distributions (a few tracts with huge counts, most with small)
+  // make a linear 0→max ramp wash out everything below the top decile. We
+  // compute stops at the 50/75/90/100th percentile of *non-zero* tracts so the
+  // gradient spreads across the meaningful range.
+  const densityStops = useMemo(() => {
+    if (!tractsWithDensity) return null;
+    const vals = tractsWithDensity.features
+      .map(f => f.properties._density || 0)
+      .filter(v => v > 0)
+      .sort((a, b) => a - b);
+    if (vals.length === 0) return null;
+    const pct = (p) => vals[Math.min(vals.length - 1, Math.floor(vals.length * p))];
+    return {
+      p50: pct(0.5),
+      p75: pct(0.75),
+      p90: pct(0.9),
+      max: vals[vals.length - 1],
+    };
   }, [tractsWithDensity]);
 
   // Cluster click → zoom to expansion zoom. Standard pattern from maplibre docs.
@@ -297,22 +327,33 @@ const GranularMap = ({ onOpenNotes }) => {
             {/* Tract outlines — always on, faded. */}
             {tracts && (
               <Source id="tracts" type="geojson" data={tracts}>
-                {aggregateMode && tractsWithDensity ? (
-                  <Layer
-                    id="tracts-density"
-                    type="fill"
-                    paint={{
-                      'fill-color': [
-                        'interpolate', ['linear'],
-                        ['coalesce', ['get', '_density'], 0],
-                        0, '#f8fafc',
-                        Math.max(densityMax, 1) * 0.25, '#fde68a',
-                        Math.max(densityMax, 1) * 0.5,  '#fb923c',
-                        Math.max(densityMax, 1),        '#b91c1c',
-                      ],
-                      'fill-opacity': 0.7,
-                    }}
-                  />
+                {aggregateMode && tractsWithDensity && densityStops ? (
+                  (() => {
+                    // maplibre interpolate stops must be strictly increasing.
+                    let s1 = Math.max(1, densityStops.p50);
+                    let s2 = Math.max(s1 + 1, densityStops.p75);
+                    let s3 = Math.max(s2 + 1, densityStops.p90);
+                    let s4 = Math.max(s3 + 1, densityStops.max);
+                    return (
+                      <Layer
+                        id="tracts-density"
+                        type="fill"
+                        paint={{
+                          'fill-color': [
+                            'interpolate', ['linear'],
+                            ['coalesce', ['get', '_density'], 0],
+                            0,  '#f8fafc',
+                            s1, '#fde68a',
+                            s2, '#fb923c',
+                            s3, '#dc2626',
+                            s4, '#7f1d1d',
+                          ],
+                          'fill-opacity': 0.75,
+                          'fill-outline-color': '#475569',
+                        }}
+                      />
+                    );
+                  })()
                 ) : null}
                 <Layer
                   id="tracts-outline"
