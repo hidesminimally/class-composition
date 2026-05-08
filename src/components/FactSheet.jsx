@@ -64,6 +64,10 @@ const RESIDENCY_KEYS = [
 
 const FactSheet = ({ p }) => {
   const isAgg = p.id === 'AGGREGATE';
+  const geoid = !isAgg && p.id ? `06001${p.id}` : null;
+  const censusReporterUrl = geoid ? `https://censusreporter.org/profiles/14000US${geoid}/` : null;
+  const dataCensusUrl = geoid ? `https://data.census.gov/all?g=1400000US${geoid}` : null;
+  const smallBase = !isAgg && typeof p.total_pop === 'number' && p.total_pop > 0 && p.total_pop < 200;
 
   // Top 3 non-English languages, sorted by share
   const topLangs = LANG_KEYS
@@ -77,14 +81,34 @@ const FactSheet = ({ p }) => {
 
   return (
     <div style={{height:'100%', display:'flex', flexDirection:'column', overflow:'auto'}}>
-      <div style={{borderBottom:'4px solid #0f172a', paddingBottom:16, marginBottom:24}}>
-        <h1 style={{fontSize:'2.2rem', fontWeight:800, margin:0, lineHeight:1}}>
-          {isAgg ? `${p.tanc_local} Local` : `Tract ${p.id}`}
-        </h1>
-        <div style={{color:'#64748b', marginTop:5, fontSize:'1rem'}}>
-          {isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter`}
+      <div style={{borderBottom:'4px solid #0f172a', paddingBottom:16, marginBottom:24, display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, flexWrap:'wrap'}}>
+        <div>
+          <h1 style={{fontSize:'2.2rem', fontWeight:800, margin:0, lineHeight:1}}>
+            {isAgg ? `${p.tanc_local} Local` : `Tract ${p.id}`}
+          </h1>
+          <div style={{color:'#64748b', marginTop:5, fontSize:'1rem'}}>
+            {isAgg ? `Consolidated Analysis (${p.tract_count} Tracts)` : `${p.tanc_local} Chapter${geoid ? ` · GEOID ${geoid}` : ''}`}
+          </div>
         </div>
+        {censusReporterUrl && (
+          <div style={{display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end'}}>
+            <a href={censusReporterUrl} target="_blank" rel="noopener noreferrer"
+               style={{fontSize:'0.8rem', fontWeight:700, color:'#2563eb', textDecoration:'none', padding:'6px 10px', border:'1px solid #2563eb', borderRadius:4}}>
+              Verify on Census Reporter ↗
+            </a>
+            <a href={dataCensusUrl} target="_blank" rel="noopener noreferrer"
+               style={{fontSize:'0.7rem', color:'#64748b', textDecoration:'none'}}>
+              data.census.gov ↗
+            </a>
+          </div>
+        )}
       </div>
+
+      {smallBase && (
+        <div style={{background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:4, padding:'8px 12px', marginBottom:16, fontSize:'0.8rem', color:'#78350f'}}>
+          <strong>⚠ Small population base ({p.total_pop}).</strong> ACS percentages and change-over-time numbers in this tract carry wide margins of error — interpret directional, not precise.
+        </div>
+      )}
 
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:32}}>
         {/* LEFT */}
@@ -176,8 +200,34 @@ const FactSheet = ({ p }) => {
         </div>
       </div>
 
-      <div style={{marginTop:'auto', paddingTop:24, borderTop:'1px dashed #cbd5e1', textAlign:'center', color:'#94a3b8', fontSize:'0.75rem'}}>
-        TANC Internal Document • Generated {new Date().toLocaleDateString()} • Source: ACS 5-year + RAP + user-provided data
+      <div style={{marginTop:'auto', paddingTop:24, borderTop:'1px dashed #cbd5e1', color:'#64748b', fontSize:'0.72rem', lineHeight:1.5}}>
+        <div style={{fontWeight:700, color:'#475569', marginBottom:6, letterSpacing:'0.04em'}}>SOURCES & METHODOLOGY</div>
+        <div style={{marginBottom:4}}>
+          <strong>Current values:</strong> ACS 2018–2022 5-year estimates.
+          {' '}<strong>"Since 2010" deltas:</strong> compared against ACS 2008–2012 5-year (labeled "2010" for brevity).
+          Eviction data from <a href="https://evictionlab.org/" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>Eviction Lab</a> where available.
+        </div>
+        <div style={{marginBottom:4}}>
+          <strong>ACS tables used:</strong>{' '}
+          <a href="https://data.census.gov/table?q=B01003" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B01003</a> pop ·{' '}
+          <a href="https://data.census.gov/table?q=B19013" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B19013</a> income ·{' '}
+          <a href="https://data.census.gov/table?q=B25064" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25064</a> rent ·{' '}
+          <a href="https://data.census.gov/table?q=B25070" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25070</a> rent burden ·{' '}
+          <a href="https://data.census.gov/table?q=B23025" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B23025</a> unemployment ·{' '}
+          <a href="https://data.census.gov/table?q=B17001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B17001</a> poverty ·{' '}
+          <a href="https://data.census.gov/table?q=B25002" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25002</a> vacancy ·{' '}
+          <a href="https://data.census.gov/table?q=B05002" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B05002</a> nativity ·{' '}
+          <a href="https://data.census.gov/table?q=B16002" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B16002</a> limited-English ·{' '}
+          <a href="https://data.census.gov/table?q=B22010" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B22010</a> SNAP ·{' '}
+          <a href="https://data.census.gov/table?q=B25044" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25044</a> vehicles ·{' '}
+          <a href="https://data.census.gov/table?q=B19001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B19001</a> income brackets ·{' '}
+          <a href="https://data.census.gov/table?q=B25034" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25034</a> year built ·{' '}
+          <a href="https://data.census.gov/table?q=B25026" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B25026</a> length of residency ·{' '}
+          <a href="https://data.census.gov/table?q=B16001" target="_blank" rel="noopener noreferrer" style={{color:'#2563eb'}}>B16001</a> language at home.
+        </div>
+        <div style={{textAlign:'center', color:'#94a3b8', marginTop:8}}>
+          TANC Internal Document • Generated {new Date().toLocaleDateString()}
+        </div>
       </div>
     </div>
   );
