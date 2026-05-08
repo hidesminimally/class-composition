@@ -463,7 +463,7 @@ const FactSheet = ({ p, allFeatures = [] }) => {
             />
           </Section>
 
-          <Section title="CLASS COMPOSITION">
+          <Section title="SOCIAL COMPOSITION">
             <Row label="Foreign-born" value={fmt(p.pct_foreign_born, '%')} metaKey="pct_foreign_born" geoid={geoid} />
             <Row label="Naturalized citizen" value={fmt(p.pct_naturalized, '%')} metaKey="pct_naturalized" geoid={geoid} />
             <Row label="Non-citizen" value={fmt(p.pct_noncitizen, '%')} metaKey="pct_noncitizen" geoid={geoid} />

@@ -19,6 +19,11 @@ const PCT_FIELDS = [
   'pct_lang_vietnamese', 'pct_lang_tagalog', 'pct_lang_korean', 'pct_lang_french',
   'pct_lor_2019_or_later', 'pct_lor_2015_2018', 'pct_lor_2010_2014',
   'pct_lor_2000_2009', 'pct_lor_1990_1999', 'pct_lor_1989_or_earlier',
+  // Social composition (added 2026-05-03; previously omitted from aggregator)
+  'pct_foreign_born', 'pct_naturalized', 'pct_noncitizen',
+  'pct_limited_eng_any', 'pct_limited_eng_spanish', 'pct_limited_eng_apilang',
+  'pct_limited_eng_indoeuropean', 'pct_limited_eng_other',
+  'pct_pub_assist_or_snap', 'pct_renter_no_vehicle', 'pct_under_35k',
 ];
 
 const DOLLAR_FIELDS = ['median_gross_rent', 'median_hh_income'];
