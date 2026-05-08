@@ -50,9 +50,14 @@ const GranularMap = ({ onOpenNotes }) => {
   // UI state
   const [showHabitability, setShowHabitability] = useState(true);
   const [show311, setShow311] = useState(true);
-  const [aggregateMode, setAggregateMode] = useState(false);
+  // 'points' = clustered dots, 'heatmap' = kernel-density blob, 'tracts' = choropleth
+  const [viewMode, setViewMode] = useState('points');
   const [aggregateSource, setAggregateSource] = useState('habitability'); // 'habitability' | 'oak311'
   const [popup, setPopup] = useState(null);
+
+  const aggregateMode = viewMode === 'tracts';
+  const heatmapMode = viewMode === 'heatmap';
+  const pointsMode = viewMode === 'points';
 
   useEffect(() => {
     let cancelled = false;
@@ -152,17 +157,17 @@ const GranularMap = ({ onOpenNotes }) => {
   // — passing an id whose layer doesn't exist yet emits a maplibre warning.
   const interactiveLayerIds = useMemo(() => {
     const ids = [];
-    if (habitability && showHabitability && !aggregateMode) {
+    if (habitability && showHabitability && pointsMode) {
       ids.push('hab-clusters', 'hab-points');
     }
-    if (oak311 && show311 && !aggregateMode) {
+    if (oak311 && show311 && pointsMode) {
       ids.push('oak311-clusters', 'oak311-points');
     }
     if (aggregateMode && tractsWithDensity) {
       ids.push('tracts-density');
     }
     return ids;
-  }, [habitability, oak311, showHabitability, show311, aggregateMode, tractsWithDensity]);
+  }, [habitability, oak311, showHabitability, show311, pointsMode, aggregateMode, tractsWithDensity]);
 
   const noData = loaded && !habitability && !oak311 && !tracts;
   const partialDataMsg = loaded
@@ -212,12 +217,32 @@ const GranularMap = ({ onOpenNotes }) => {
           <span className="label-header">View mode</span>
           <label style={layerToggleStyle}>
             <input
-              type="checkbox"
+              type="radio"
+              name="view-mode"
+              checked={pointsMode}
+              onChange={() => setViewMode('points')}
+            />
+            <span>Points (clustered dots)</span>
+          </label>
+          <label style={layerToggleStyle}>
+            <input
+              type="radio"
+              name="view-mode"
+              checked={heatmapMode}
+              onChange={() => setViewMode('heatmap')}
+              disabled={!habitability && !oak311}
+            />
+            <span>Heatmap (point density)</span>
+          </label>
+          <label style={layerToggleStyle}>
+            <input
+              type="radio"
+              name="view-mode"
               checked={aggregateMode}
-              onChange={(e) => setAggregateMode(e.target.checked)}
+              onChange={() => setViewMode('tracts')}
               disabled={!habByTract && !oak311ByTract}
             />
-            <span>Tract aggregates (heatmap)</span>
+            <span>Tract aggregates (choropleth)</span>
           </label>
           {aggregateMode && (
             <div style={{ marginTop: 8 }}>
@@ -230,6 +255,12 @@ const GranularMap = ({ onOpenNotes }) => {
                 <option value="oak311" disabled={!oak311ByTract}>311 density</option>
               </select>
             </div>
+          )}
+          {heatmapMode && (
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.4, marginTop: 8, marginBottom: 0 }}>
+              Hot zones = highest complaint density. Use this to scan which blocks
+              have the most pressure and prioritize canvassing.
+            </p>
           )}
         </div>
 
@@ -300,8 +331,58 @@ const GranularMap = ({ onOpenNotes }) => {
               </Source>
             )}
 
+            {/* Heatmap mode — kernel density blobs. Uses the raw GeoJSONs without
+                clustering so intensity reflects every point. Only one heatmap
+                source per dataset is registered when this mode is on. */}
+            {habitability && showHabitability && heatmapMode && (
+              <Source id="hab-heat" type="geojson" data={habitability}>
+                <Layer
+                  id="hab-heatmap"
+                  type="heatmap"
+                  paint={{
+                    'heatmap-weight': 1,
+                    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 1, 15, 3],
+                    'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 10, 14, 15, 30],
+                    'heatmap-opacity':   ['interpolate', ['linear'], ['zoom'], 14, 0.85, 16, 0.5],
+                    'heatmap-color': [
+                      'interpolate', ['linear'], ['heatmap-density'],
+                      0,    'rgba(255,237,213,0)',
+                      0.2,  'rgba(254,215,170,0.6)',
+                      0.4,  'rgba(251,146,60,0.7)',
+                      0.6,  'rgba(234,88,12,0.8)',
+                      0.8,  'rgba(185,28,28,0.85)',
+                      1,    'rgba(127,29,29,0.9)',
+                    ],
+                  }}
+                />
+              </Source>
+            )}
+            {oak311 && show311 && heatmapMode && (
+              <Source id="oak311-heat" type="geojson" data={oak311}>
+                <Layer
+                  id="oak311-heatmap"
+                  type="heatmap"
+                  paint={{
+                    'heatmap-weight': 1,
+                    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 1, 15, 3],
+                    'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 10, 14, 15, 30],
+                    'heatmap-opacity':   ['interpolate', ['linear'], ['zoom'], 14, 0.7, 16, 0.4],
+                    'heatmap-color': [
+                      'interpolate', ['linear'], ['heatmap-density'],
+                      0,    'rgba(207,250,254,0)',
+                      0.2,  'rgba(165,243,252,0.55)',
+                      0.4,  'rgba(34,211,238,0.65)',
+                      0.6,  'rgba(8,145,178,0.75)',
+                      0.8,  'rgba(14,116,144,0.8)',
+                      1,    'rgba(22,78,99,0.85)',
+                    ],
+                  }}
+                />
+              </Source>
+            )}
+
             {/* Habitability points — only when not in aggregate mode. */}
-            {habitability && showHabitability && !aggregateMode && (
+            {habitability && showHabitability && pointsMode && (
               <Source
                 id="habitability"
                 type="geojson"
@@ -357,7 +438,7 @@ const GranularMap = ({ onOpenNotes }) => {
             )}
 
             {/* 311 housing points. */}
-            {oak311 && show311 && !aggregateMode && (
+            {oak311 && show311 && pointsMode && (
               <Source
                 id="oak311"
                 type="geojson"
@@ -444,6 +525,15 @@ function PopupContent({ props, layer, onOpenNotes }) {
   const address = props.address ?? props.location ?? props.street_address ?? '—';
   const tractId = props.tract_id ?? props.tract ?? props.GEOID ?? null;
 
+  // Both habitability + 311 housing come from Oakland's OAK 311 Socrata dataset
+  // (quth-gb8e). SODA filter by casenumber returns the canonical record.
+  const recordUrl = caseId && caseId !== '—'
+    ? `https://data.oaklandca.gov/resource/quth-gb8e.json?casenumber=${encodeURIComponent(caseId)}`
+    : null;
+  const mapsUrl = address && address !== '—'
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address + ' Oakland CA')}`
+    : null;
+
   return (
     <div style={{ fontSize: '0.78rem', color: '#1e293b', lineHeight: 1.45 }}>
       <div style={{
@@ -453,11 +543,33 @@ function PopupContent({ props, layer, onOpenNotes }) {
       }}>
         {isHab ? 'Habitability complaint' : '311 housing'}
       </div>
-      <div><b>Case</b> {String(caseId)}</div>
+      <div>
+        <b>Case</b>{' '}
+        {recordUrl ? (
+          <a
+            href={recordUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+            title="Open record on data.oaklandca.gov (JSON)"
+          >{String(caseId)} ↗</a>
+        ) : String(caseId)}
+      </div>
       <div><b>Type</b> {String(type)}</div>
       <div><b>Status</b> {String(status)}</div>
       <div><b>Opened</b> {String(opened)}</div>
-      <div><b>Address</b> {String(address)}</div>
+      <div>
+        <b>Address</b>{' '}
+        {mapsUrl ? (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+            title="Open in Google Maps"
+          >{String(address)} ↗</a>
+        ) : String(address)}
+      </div>
       {tractId != null && onOpenNotes && (
         <button
           style={{
