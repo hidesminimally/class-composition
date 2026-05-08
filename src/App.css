@@ -137,6 +137,28 @@ td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
 tr:hover td { background: #f8fafc; }
 tr.selected td { background: #eff6ff; }
 
+/* Wide grid with horizontal scroll. Each column gets a min-width so the table
+   exceeds the viewport and the .table-content wrapper takes over scrolling. */
+table.data-grid { width: auto; min-width: 100%; }
+table.data-grid th, table.data-grid td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+table.data-grid th { min-width: 64px; font-size: 0.72rem; }
+table.data-grid td { font-size: 0.78rem; }
+
+/* First two columns (Local, ID) pin to the left so context stays visible. */
+table.data-grid .sticky-col {
+  position: sticky; z-index: 2;
+  background: white;
+  box-shadow: inset -1px 0 0 var(--border);
+}
+table.data-grid thead .sticky-col { z-index: 3; background: #f1f5f9; }
+table.data-grid .sticky-col-0 { left: 0; min-width: 90px; }
+table.data-grid .sticky-col-1 { left: 90px; min-width: 80px; }
+table.data-grid tr.selected .sticky-col { background: #eff6ff; }
+table.data-grid tr:hover .sticky-col { background: #f8fafc; }
+
 /* --- FACT SHEET MODAL (Fixed) --- */
 .fs-overlay {
   position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8);
