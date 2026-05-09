@@ -164,7 +164,10 @@ const GranularMap = ({ onOpenNotes }) => {
       setLayerData(next);
       setLoaded(true);
 
-      // Auto-tune the year range to fit the data we actually have.
+      // Default year range = full union of data we have. Different layers
+      // cover different windows (RAP ends 2022, OAK 311 goes to today), and
+      // an over-narrow default hides most records — caused real confusion
+      // about whether RAP was loaded at all.
       let minY = Infinity, maxY = -Infinity;
       for (const l of LAYERS) {
         const pts = next[l.key]?.points;
@@ -177,14 +180,31 @@ const GranularMap = ({ onOpenNotes }) => {
         }
       }
       if (Number.isFinite(minY) && Number.isFinite(maxY)) {
-        const upper = maxY;
-        const lower = Math.max(minY, upper - 4); // default to last 5 years
-        setYearFrom(lower);
-        setYearTo(upper);
+        setYearFrom(minY);
+        setYearTo(maxY);
       }
     });
     return () => { cancelled = true; };
   }, []);
+
+  // Per-layer year range — used for the "RAP: 1996-2022" hint under each
+  // layer toggle so the user knows what window the data covers.
+  const layerYearRange = useMemo(() => {
+    const out = {};
+    for (const l of LAYERS) {
+      const pts = layerData[l.key]?.points;
+      if (!pts?.features) { out[l.key] = null; continue; }
+      let lo = Infinity, hi = -Infinity;
+      for (const ft of pts.features) {
+        const y = yearOf(ft.properties?.[l.dateField]);
+        if (y == null) continue;
+        if (y < lo) lo = y;
+        if (y > hi) hi = y;
+      }
+      out[l.key] = Number.isFinite(lo) ? { lo, hi } : null;
+    }
+    return out;
+  }, [layerData]);
 
   // Per-layer category list (sorted by frequency desc, top 12). Computed once
   // points are loaded; used to populate the multi-select panel.
@@ -796,6 +816,20 @@ function layerForId(layerId) {
   return LAYERS.find(l => layerId.startsWith(`${l.key}-`)) || null;
 }
 
+// AEMP rap-scrape encodes "grounds" as boolean column names with a `ll_`
+// (landlord-filed) or `ts_` (tenant-filed) prefix. We don't have a hand-
+// curated dictionary of every code, so just prettify: strip the prefix and
+// replace underscores with spaces. The prefix is shown as a Tenant/Landlord
+// pill so the reader still knows who filed under that ground.
+function prettifyGround(code) {
+  if (typeof code !== 'string') return { side: null, text: String(code) };
+  const m = code.match(/^(ll|ts)_(.*)$/);
+  if (!m) return { side: null, text: code.replace(/_/g, ' ') };
+  const side = m[1] === 'll' ? 'Landlord' : 'Tenant';
+  const text = m[2].replace(/_/g, ' ');
+  return { side, text };
+}
+
 function PopupContent({ props, layerId, onOpenNotes }) {
   const layer = layerForId(layerId);
   const kind = layer?.casePopupKind ?? 'Record';
@@ -818,7 +852,18 @@ function PopupContent({ props, layerId, onOpenNotes }) {
     : null;
 
   const isEvictions = layer?.key === 'evictions';
-  const grounds = Array.isArray(props.grounds) ? props.grounds.join(', ') : props.grounds;
+  // RAP records have no per-petition URL (Oakland's RAP search system is
+  // not query-addressable), so we link to the upstream AEMP scrape CSV
+  // that this row was loaded from. That's the verifiable source.
+  const rapSourceUrl = isEvictions
+    ? 'https://github.com/antievictionmappingproject/aemp-rap-scrape/blob/main/data/clean/rap_cases_clean.csv'
+    : null;
+  const rapSearchUrl = isEvictions
+    ? 'https://www.oaklandca.gov/services/research-rent-adjustment-program-cases'
+    : null;
+  const groundsList = Array.isArray(props.grounds)
+    ? props.grounds.map(prettifyGround)
+    : (props.grounds ? [prettifyGround(String(props.grounds))] : []);
 
   return (
     <div style={{ fontSize: '0.78rem', color: '#1e293b', lineHeight: 1.45 }}>
@@ -835,14 +880,47 @@ function PopupContent({ props, layerId, onOpenNotes }) {
              title="Open record on data.oaklandca.gov (JSON)">
             {String(caseId)} ↗
           </a>
+        ) : rapSourceUrl ? (
+          <a href={rapSourceUrl} target="_blank" rel="noopener noreferrer"
+             style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+             title="Source CSV on antievictionmappingproject/aemp-rap-scrape">
+            {String(caseId)} ↗
+          </a>
         ) : String(caseId)}
       </div>
 
       {isEvictions ? (
         <>
-          {props.record_kind && <div><b>Filed by</b> {props.record_kind}</div>}
-          {grounds && <div><b>Grounds</b> {String(grounds)}</div>}
-          {props.hearing_date && <div><b>Hearing</b> {String(props.hearing_date)}</div>}
+          {props.case_number && props.case_number !== caseId && (
+            <div><b>Case #</b> {String(props.case_number)}</div>
+          )}
+          {props.record_kind && <div><b>Filed by</b> {String(props.record_kind)}</div>}
+          {groundsList.length > 0 && (
+            <div style={{ marginTop: 2 }}>
+              <b>Grounds</b>
+              <ul style={{ margin: '2px 0 0 0', paddingLeft: 16 }}>
+                {groundsList.map((g, i) => (
+                  <li key={i}>
+                    {g.side && (
+                      <span style={{
+                        display: 'inline-block', padding: '0 4px', marginRight: 4,
+                        fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.03em',
+                        textTransform: 'uppercase', borderRadius: 3,
+                        background: g.side === 'Tenant' ? '#dcfce7' : '#fee2e2',
+                        color: g.side === 'Tenant' ? '#166534' : '#991b1b',
+                      }}>{g.side}</span>
+                    )}
+                    {g.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {props.hearing_officer && <div><b>Hearing officer</b> {String(props.hearing_officer)}</div>}
+          {props.hearing_date && <div><b>Hearing</b> {String(props.hearing_date).slice(0, 10)}</div>}
+          {props.mediation_date && <div><b>Mediation</b> {String(props.mediation_date).slice(0, 10)}</div>}
+          {props.appeal_hearing_date && <div><b>Appeal hearing</b> {String(props.appeal_hearing_date).slice(0, 10)}</div>}
+          {props.apn && <div><b>APN</b> {String(props.apn)}</div>}
         </>
       ) : (
         <>
@@ -866,6 +944,24 @@ function PopupContent({ props, layerId, onOpenNotes }) {
         ) : String(address)}
       </div>
       {props.councildistrict && <div><b>Council</b> {String(props.councildistrict)}</div>}
+
+      {isEvictions && (rapSourceUrl || rapSearchUrl) && (
+        <div style={{ marginTop: 6, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          {rapSourceUrl && (
+            <a href={rapSourceUrl} target="_blank" rel="noopener noreferrer"
+               style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+              source CSV ↗
+            </a>
+          )}
+          {rapSourceUrl && rapSearchUrl && ' · '}
+          {rapSearchUrl && (
+            <a href={rapSearchUrl} target="_blank" rel="noopener noreferrer"
+               style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+              Oakland RAP lookup ↗
+            </a>
+          )}
+        </div>
+      )}
 
       {tractId != null && onOpenNotes && (
         <button
