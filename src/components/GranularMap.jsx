@@ -426,6 +426,19 @@ const GranularMap = ({ onOpenNotes }) => {
                       : (total != null ? total.toLocaleString() : '—')}
                   </span>
                 </label>
+                {layerYearRange[l.key] && (
+                  <div style={{
+                    marginLeft: 22, marginTop: -2, marginBottom: 4,
+                    fontSize: '0.65rem', color: 'var(--text-muted)',
+                  }}>
+                    data window: {layerYearRange[l.key].lo}–{layerYearRange[l.key].hi}
+                    {l.key === 'evictions' && layerYearRange[l.key].hi <= 2022 && (
+                      <span style={{ color: '#b45309', marginLeft: 4 }}>
+                        (no fresher source publicly scrapeable)
+                      </span>
+                    )}
+                  </div>
+                )}
                 {enabled[l.key] && cats.length > 1 && (
                   <div style={{ marginLeft: 22, marginTop: 4 }}>
                     <button
@@ -733,7 +746,7 @@ const SOURCE_INFO = [
     label: 'RAP / Eviction petitions',
     publisher: 'Oakland Rent Adjustment Program (via AEMP scrape)',
     url: 'https://github.com/antievictionmappingproject/aemp-rap-scrape',
-    note: 'Anti-Eviction Mapping Project rap-scrape; addresses geocoded via Census Geocoder. record_kind=Tenant or Landlord petitioner.',
+    note: 'Anti-Eviction Mapping Project rap-scrape (1996–2022-03); addresses geocoded via Census Geocoder. record_kind=Tenant or Landlord petitioner. Upstream scrape is dormant; Oakland\'s newer RAP Eviction Portal is dashboard-only — no fresher per-petition data is publicly downloadable.',
   },
   {
     key: 'inspections',
@@ -858,8 +871,12 @@ function PopupContent({ props, layerId, onOpenNotes }) {
   const rapSourceUrl = isEvictions
     ? 'https://github.com/antievictionmappingproject/aemp-rap-scrape/blob/main/data/clean/rap_cases_clean.csv'
     : null;
+  // Oakland's RAP doesn't expose a per-case lookup URL, but the program
+  // landing page is a working entry point if the user wants to chase down
+  // a specific petition. (The /services/research-... URL is a 404 — the
+  // city reorganized that page.)
   const rapSearchUrl = isEvictions
-    ? 'https://www.oaklandca.gov/services/research-rent-adjustment-program-cases'
+    ? 'https://www.oaklandca.gov/Community/Housing-Programs-Support/Rent-Adjustment-Program-RAP'
     : null;
   const groundsList = Array.isArray(props.grounds)
     ? props.grounds.map(prettifyGround)
