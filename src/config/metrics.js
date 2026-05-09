@@ -15,6 +15,10 @@ export const METRICS = {
   pct_pub_assist_or_snap: { label: "% on SNAP or Public Assistance", short: "SNAP", color: "#dc2626", max: 40 },
   pct_renter_no_vehicle: { label: "% Renter Households without a Vehicle", short: "No veh", color: "#ca8a04", max: 50 },
   pct_under_35k: { label: "% Households Earning Under $35,000", short: "<$35k", color: "#991b1b", max: 65 },
+  // Tenant bundle (added 2026-05-09)
+  pct_renter_occupied: { label: "% Renter-Occupied Households", short: "% Renter", color: "#0d9488", max: 100 },
+  pct_pre_1980_housing: { label: "% Housing Built Pre-1980 (RAP-eligible)", short: "Pre-1980", color: "#7c2d12", max: 100 },
+  pct_burden_50_plus: { label: "% Renters Severely Rent-Burdened (≥50% of income)", short: "Severe Brdn", color: "#be123c", max: 60 },
   // Diverging — racial change since 2010 (relative % change). Domain centered on 0.
   // p10/p90 across Alameda is roughly ±50 / +130, so [-50, 0, +100] gives useful
   // contrast without burning out on a few extreme gentrifying tracts.

@@ -158,6 +158,8 @@ def main():
         'pct_limited_eng_spanish', 'pct_limited_eng_indoeuropean',
         'pct_limited_eng_apilang', 'pct_limited_eng_other', 'pct_limited_eng_any',
         'pct_pub_assist_or_snap', 'pct_renter_no_vehicle', 'pct_under_35k',
+        # Tenant bundle (added 2026-05-09)
+        'pct_renter_occupied', 'pct_pre_1980_housing', 'pct_burden_50_plus',
     ]
     delta_cols = [f'{v}_2010' for v in DELTA_VARS] + [f'{v}_delta_pct' for v in DELTA_VARS]
     keep_cols = base_cols + delta_cols + ['geometry']

@@ -99,6 +99,28 @@ CENSUS_FIELDS = {
     'B19001_005E': 'inc_20_25k',
     'B19001_006E': 'inc_25_30k',
     'B19001_007E': 'inc_30_35k',
+
+    # ---- Tenant bundle (added 2026-05-09) ----
+    # Tenure (B25003): renter share of occupied housing — directly identifies
+    # majority-renter tracts (the constituency for tenant organizing).
+    'B25003_001E': 'tenure_total',
+    'B25003_003E': 'renter_occupied',
+
+    # Year structure built (B25034): pre-1980 share is the practical proxy
+    # for "covered by Oakland RAP / Just Cause." RAP exempts buildings
+    # certified after 1983 and AB 1482 has a rolling 15-year exemption,
+    # but the bulk of Oakland's RAP-covered stock is pre-1980.
+    'B25034_001E': 'year_built_total',
+    'B25034_002E': 'built_2014_or_later',
+    'B25034_003E': 'built_2010_2013',
+    'B25034_004E': 'built_2000_2009',
+    'B25034_005E': 'built_1990_1999',
+    'B25034_006E': 'built_1980_1989',
+    'B25034_007E': 'built_1970_1979',
+    'B25034_008E': 'built_1960_1969',
+    'B25034_009E': 'built_1950_1959',
+    'B25034_010E': 'built_1940_1949',
+    'B25034_011E': 'built_1939_or_earlier',
 }
 
 # CPI-U deflator: 2010 → 2020 (BLS CPI-U all-urban, 2010 annual avg → 2020 annual avg)

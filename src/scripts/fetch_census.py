@@ -17,7 +17,8 @@ VINTAGE_YEAR_MAP = {
 # Class-composition layer (B05*/C16002/B19058/B25044/B19001) was only needed for
 # 2020 (current snapshot), so dropping it from 2010 is intentional.
 GRACEFUL_DEGRADE_PREFIXES = ['B25026_', 'B16001_', 'C16001_', 'B05001_', 'B05002_',
-                             'C16002_', 'B19058_', 'B25044_', 'B19001_']
+                             'C16002_', 'B19058_', 'B25044_', 'B19001_',
+                             'B25003_', 'B25034_']
 
 # Census API "annotation" sentinels meaning "data not available / suppressed".
 # See https://www.census.gov/data/developers/data-sets/acs-5year/data-notes.html
@@ -187,6 +188,27 @@ def compute_derived_metrics(df):
         present = [c for c in low_income_cols if c in df.columns]
         if present:
             df['pct_under_35k'] = _safe_pct(df[present].sum(axis=1), df['inc_dist_total'])
+
+    # ---- Tenant bundle ----
+
+    # Severe rent burden = renter households paying ≥50% of income on rent.
+    # Already in raw burden_50_plus; surface as its own pct so the map can
+    # distinguish severe from "any" burden (>30%, the existing rent_burden).
+    if 'renter_households_total' in df.columns and 'burden_50_plus' in df.columns:
+        df['pct_burden_50_plus'] = _safe_pct(df['burden_50_plus'], df['renter_households_total'])
+
+    # Renter share of occupied housing
+    if 'tenure_total' in df.columns and 'renter_occupied' in df.columns:
+        df['pct_renter_occupied'] = _safe_pct(df['renter_occupied'], df['tenure_total'])
+
+    # Pre-1980 housing share — practical proxy for Oakland RAP / Just Cause coverage.
+    # Sums all year-built buckets up to and including 1970–1979.
+    if 'year_built_total' in df.columns:
+        pre_1980_cols = ['built_1970_1979', 'built_1960_1969', 'built_1950_1959',
+                         'built_1940_1949', 'built_1939_or_earlier']
+        present = [c for c in pre_1980_cols if c in df.columns]
+        if present:
+            df['pct_pre_1980_housing'] = _safe_pct(df[present].sum(axis=1), df['year_built_total'])
 
     return df
 
