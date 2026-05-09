@@ -528,6 +528,8 @@ const GranularMap = ({ onOpenNotes }) => {
           if (missing.length === 0) return null;
           return <div style={infoBoxStyle}>Pending: {missing.join(', ')}.</div>;
         })()}
+
+        <SourcesPanel layerData={layerData} />
       </aside>
 
       <div style={{ flex: 1, position: 'relative' }}>
@@ -551,7 +553,11 @@ const GranularMap = ({ onOpenNotes }) => {
             interactiveLayerIds={interactiveLayerIds}
           >
             {tracts && (
-              <Source id="tracts" type="geojson" data={tracts}>
+              <Source
+                id="tracts"
+                type="geojson"
+                data={aggregateMode && tractsWithDensity ? tractsWithDensity : tracts}
+              >
                 {aggregateMode && tractsWithDensity && densityStops ? (
                   (() => {
                     let s1 = Math.max(1, densityStops.p50);
@@ -585,10 +591,6 @@ const GranularMap = ({ onOpenNotes }) => {
                   paint={{ 'line-color': '#475569', 'line-opacity': 0.2, 'line-width': 0.6 }}
                 />
               </Source>
-            )}
-
-            {aggregateMode && tractsWithDensity && (
-              <Source id="tracts-density-src" type="geojson" data={tractsWithDensity} />
             )}
 
             {/* Heatmap layers — one per enabled layer. Uses filtered data. */}
@@ -687,6 +689,106 @@ const GranularMap = ({ onOpenNotes }) => {
     </div>
   );
 };
+
+// Static catalog of where each layer's data comes from. Shown in the sidebar
+// SOURCES panel so an organizer or auditor can verify provenance without
+// digging through the repo.
+const SOURCE_INFO = [
+  {
+    key: 'habitability',
+    label: 'Habitability complaints',
+    publisher: 'City of Oakland (OAK 311 / Code Enforcement subset)',
+    url: 'https://data.oaklandca.gov/dataset/OAK-311/quth-gb8e',
+    note: 'Socrata dataset quth-gb8e, filtered to category=OTHER (Code Enforcement).',
+  },
+  {
+    key: 'oak311',
+    label: '311 housing-related',
+    publisher: 'City of Oakland (OAK 311)',
+    url: 'https://data.oaklandca.gov/dataset/OAK-311/quth-gb8e',
+    note: 'Socrata quth-gb8e, last 2 years, kept HE_CLEAN/OTHER/ENVIRON_ENF/BLDGMAINT (decimated from 232MB→541KB by dropping ILLDUMP/ABANDONED AUTO).',
+  },
+  {
+    key: 'evictions',
+    label: 'RAP / Eviction petitions',
+    publisher: 'Oakland Rent Adjustment Program (via AEMP scrape)',
+    url: 'https://github.com/anti-eviction-mapping-project/aemp-rap-scrape',
+    note: 'Anti-Eviction Mapping Project rap-scrape; addresses geocoded via Census Geocoder. record_kind=Tenant or Landlord petitioner.',
+  },
+  {
+    key: 'inspections',
+    label: 'ROW Inspections',
+    publisher: 'City of Oakland (OAK 311 / ROW_INSPECTORS)',
+    url: 'https://data.oaklandca.gov/dataset/OAK-311/quth-gb8e',
+    note: 'Right-of-way inspections — sidewalks, encroachments, street obstructions. NOT rental-unit complaints. Use as tertiary signal only.',
+  },
+  {
+    key: 'tracts',
+    label: 'Tract polygons + Census ACS attributes',
+    publisher: 'US Census Bureau (American Community Survey)',
+    url: 'https://www.census.gov/programs-surveys/acs',
+    note: '2018-2022 ACS 5-year + 2010 ACS 5-year for delta columns. Tract geometry from Census TIGER/Line.',
+  },
+  {
+    key: 'basemap',
+    label: 'Basemap',
+    publisher: 'CARTO Positron + OpenStreetMap',
+    url: 'https://www.openstreetmap.org/copyright',
+    note: 'Tiles © CARTO, data © OpenStreetMap contributors.',
+  },
+];
+
+function SourcesPanel({ layerData }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 18, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+        }}
+      >
+        <span>{open ? '▾' : '▸'}</span>
+        <span>Sources & attribution</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--text)', lineHeight: 1.45 }}>
+          {SOURCE_INFO.map(s => {
+            const meta = layerData[s.key]?.agg;
+            const generated = meta?._generated;
+            return (
+              <div key={s.key} style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, color: 'var(--text)' }}>{s.label}</div>
+                <div style={{ color: 'var(--text-muted)' }}>{s.publisher}</div>
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)', textDecoration: 'underline', wordBreak: 'break-all' }}
+                >{s.url}</a>
+                <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{s.note}</div>
+                {generated && (
+                  <div style={{ color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
+                    Refreshed {String(generated).slice(0, 10)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+            Code: <a href="https://github.com/hidesminimally/class-composition"
+              target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', textDecoration: 'underline' }}>github.com/hidesminimally/class-composition</a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Match a clicked layer ID like "evictions-points" back to its LAYERS entry.
 function layerForId(layerId) {
