@@ -712,7 +712,7 @@ const SOURCE_INFO = [
     key: 'evictions',
     label: 'RAP / Eviction petitions',
     publisher: 'Oakland Rent Adjustment Program (via AEMP scrape)',
-    url: 'https://github.com/anti-eviction-mapping-project/aemp-rap-scrape',
+    url: 'https://github.com/antievictionmappingproject/aemp-rap-scrape',
     note: 'Anti-Eviction Mapping Project rap-scrape; addresses geocoded via Census Geocoder. record_kind=Tenant or Landlord petitioner.',
   },
   {
@@ -807,8 +807,11 @@ function PopupContent({ props, layerId, onOpenNotes }) {
   const address = props.address ?? props.location ?? '—';
   const tractId = props.tract_id ?? props.tract ?? props.GEOID ?? null;
 
+  // Socrata field for OAK 311 case ID is `requestid` (not `casenumber` — that
+  // is a documented gotcha; the dataset's UI label says "Case Number" but the
+  // API column is `requestid`).
   const recordUrl = caseId && caseId !== '—' && (layer?.key === 'habitability' || layer?.key === 'oak311' || layer?.key === 'inspections')
-    ? `https://data.oaklandca.gov/resource/quth-gb8e.json?casenumber=${encodeURIComponent(caseId)}`
+    ? `https://data.oaklandca.gov/resource/quth-gb8e.json?requestid=${encodeURIComponent(caseId)}`
     : null;
   const mapsUrl = address && address !== '—'
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address + ' Oakland CA')}`
