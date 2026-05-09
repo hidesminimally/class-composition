@@ -208,23 +208,37 @@ const GranularMap = ({ onOpenNotes }) => {
     return out;
   }, [layerData]);
 
-  // maplibre filter expression for a layer: year range AND optional category
-  // membership. We compare date strings lexically (ISO-8601 sorts correctly).
-  const buildFilter = useCallback((layer) => {
-    const conds = [];
+  // Pre-filter each layer's features in JS. We can't put year/category filter
+  // expressions on the cluster circle layer because cluster features have no
+  // date_opened / complaint_type — they're aggregations. So we slice the raw
+  // GeoJSON down here, hand the filtered FeatureCollection to the clustered
+  // Source, and let maplibre re-cluster on the smaller set.
+  const filteredLayerData = useMemo(() => {
     const lower = `${yearFrom}-01-01`;
     const upper = `${yearTo}-12-31`;
-    conds.push(['>=', ['coalesce', ['get', layer.dateField], ''], lower]);
-    conds.push(['<=', ['coalesce', ['get', layer.dateField], ''], upper]);
-    const sel = selectedCats[layer.key];
-    if (sel && sel !== 'all') {
-      const cats = Array.from(sel);
-      if (cats.length > 0) {
-        conds.push(['in', ['coalesce', ['get', layer.categoryField], ''], ['literal', cats]]);
-      }
+    const out = {};
+    for (const l of LAYERS) {
+      const pts = layerData[l.key]?.points;
+      if (!pts?.features) { out[l.key] = pts; continue; }
+      const sel = selectedCats[l.key];
+      const catSet = sel && sel !== 'all' ? sel : null;
+      const features = pts.features.filter(f => {
+        const p = f.properties || {};
+        const d = p[l.dateField];
+        if (typeof d === 'string') {
+          if (d < lower || d > upper + '￿') return false;
+        }
+        if (catSet) {
+          const v = p[l.categoryField];
+          const s = Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v));
+          if (!catSet.has(s)) return false;
+        }
+        return true;
+      });
+      out[l.key] = { ...pts, features };
     }
-    return ['all', ...conds];
-  }, [yearFrom, yearTo, selectedCats]);
+    return out;
+  }, [layerData, yearFrom, yearTo, selectedCats]);
 
   // Tract aggregate join — same robust 11-digit ↔ 6-digit lookup as before,
   // now generalized over the 4 layers.
@@ -369,7 +383,8 @@ const GranularMap = ({ onOpenNotes }) => {
           <span className="label-header">Layers</span>
           {LAYERS.map(l => {
             const data = layerData[l.key];
-            const n = data?.points?.features?.length ?? null;
+            const total = data?.points?.features?.length ?? null;
+            const filtered = filteredLayerData[l.key]?.features?.length ?? null;
             const cats = layerCategories[l.key] || [];
             const sel = selectedCats[l.key];
             const selSize = sel === 'all' ? 0 : sel.size;
@@ -386,7 +401,9 @@ const GranularMap = ({ onOpenNotes }) => {
                   <span style={{ ...colorDot, background: l.color }} />
                   <span style={{ flex: 1 }}>{l.label}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-                    {n != null ? n.toLocaleString() : '—'}
+                    {filtered != null && total != null && filtered !== total
+                      ? `${filtered.toLocaleString()} / ${total.toLocaleString()}`
+                      : (total != null ? total.toLocaleString() : '—')}
                   </span>
                 </label>
                 {enabled[l.key] && cats.length > 1 && (
@@ -574,16 +591,15 @@ const GranularMap = ({ onOpenNotes }) => {
               <Source id="tracts-density-src" type="geojson" data={tractsWithDensity} />
             )}
 
-            {/* Heatmap layers — one per enabled layer. Filters apply. */}
+            {/* Heatmap layers — one per enabled layer. Uses filtered data. */}
             {heatmapMode && LAYERS.map(l => {
-              const pts = layerData[l.key]?.points;
-              if (!pts || !enabled[l.key]) return null;
+              const pts = filteredLayerData[l.key];
+              if (!pts || !enabled[l.key] || pts.features.length === 0) return null;
               return (
                 <Source key={`${l.key}-heat`} id={`${l.key}-heat`} type="geojson" data={pts}>
                   <Layer
                     id={`${l.key}-heatmap`}
                     type="heatmap"
-                    filter={buildFilter(l)}
                     paint={{
                       'heatmap-weight': 1,
                       'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 1, 15, 3],
@@ -596,11 +612,11 @@ const GranularMap = ({ onOpenNotes }) => {
               );
             })}
 
-            {/* Points layers — one source per enabled layer, with cluster + filter. */}
+            {/* Points layers — one source per enabled layer. Cluster on the
+                pre-filtered feature set so cluster counts reflect the filter. */}
             {pointsMode && LAYERS.map(l => {
-              const pts = layerData[l.key]?.points;
-              if (!pts || !enabled[l.key]) return null;
-              const filter = buildFilter(l);
+              const pts = filteredLayerData[l.key];
+              if (!pts || !enabled[l.key] || pts.features.length === 0) return null;
               const [c1, c2, c3] = l.clusterColors;
               return (
                 <Source
@@ -615,7 +631,7 @@ const GranularMap = ({ onOpenNotes }) => {
                   <Layer
                     id={`${l.key}-clusters`}
                     type="circle"
-                    filter={['all', ['has', 'point_count'], filter]}
+                    filter={['has', 'point_count']}
                     paint={{
                       'circle-color': ['step', ['get', 'point_count'], c1, 25, c2, 100, c3],
                       'circle-radius': ['step', ['get', 'point_count'], 14, 25, 20, 100, 28],
@@ -626,7 +642,7 @@ const GranularMap = ({ onOpenNotes }) => {
                   <Layer
                     id={`${l.key}-cluster-count`}
                     type="symbol"
-                    filter={['all', ['has', 'point_count'], filter]}
+                    filter={['has', 'point_count']}
                     layout={{
                       'text-field': ['get', 'point_count_abbreviated'],
                       'text-size': 12,
@@ -637,7 +653,7 @@ const GranularMap = ({ onOpenNotes }) => {
                   <Layer
                     id={`${l.key}-points`}
                     type="circle"
-                    filter={['all', ['!', ['has', 'point_count']], filter]}
+                    filter={['!', ['has', 'point_count']]}
                     paint={{
                       'circle-color': l.color,
                       'circle-radius': 5,
