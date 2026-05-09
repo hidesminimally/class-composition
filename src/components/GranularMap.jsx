@@ -871,12 +871,12 @@ function PopupContent({ props, layerId, onOpenNotes }) {
   const rapSourceUrl = isEvictions
     ? 'https://github.com/antievictionmappingproject/aemp-rap-scrape/blob/main/data/clean/rap_cases_clean.csv'
     : null;
-  // Oakland's RAP doesn't expose a per-case lookup URL, but the program
-  // landing page is a working entry point if the user wants to chase down
-  // a specific petition. (The /services/research-... URL is a 404 — the
-  // city reorganized that page.)
+  // Oakland's RAP petition lookup lives at apps.oaklandca.gov/rappetitions/
+  // (OutSystems / ASP.NET app — same backend the AEMP scraper hits).
+  // The petition number isn't query-addressable in the URL, so we link to
+  // the portal entry point and the user pastes the number into its search.
   const rapSearchUrl = isEvictions
-    ? 'https://www.oaklandca.gov/Community/Housing-Programs-Support/Rent-Adjustment-Program-RAP'
+    ? 'https://apps.oaklandca.gov/rappetitions/'
     : null;
   const groundsList = Array.isArray(props.grounds)
     ? props.grounds.map(prettifyGround)
